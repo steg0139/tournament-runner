@@ -290,6 +290,98 @@ export function generateGroupSwissRound(
 }
 
 /**
+ * Revert a completed match result and apply a new score.
+ * Used for editing match results after the fact.
+ */
+export function revertAndReScore(
+  tournament: MultiStageTournament,
+  matchId: string,
+  newTeam1Score: number,
+  newTeam2Score: number
+): MultiStageTournament {
+  // Find the match
+  let targetStage: Stage | undefined;
+  let targetMatch: Match | undefined;
+
+  for (const stage of tournament.stages) {
+    const match = stage.matches.find((m) => m.id === matchId);
+    if (match) {
+      targetStage = stage;
+      targetMatch = match;
+      break;
+    }
+  }
+
+  if (!targetStage || !targetMatch) {
+    throw new Error('Match not found');
+  }
+
+  if (targetMatch.status !== 'completed') {
+    throw new Error('Can only edit completed matches');
+  }
+
+  // Revert the old result
+  const oldWinnerId = targetMatch.winnerId;
+  const oldLoserId = targetMatch.loserId;
+
+  if (oldWinnerId) {
+    const winnerInfo = targetStage.teamStageInfo.find((t) => t.teamId === oldWinnerId);
+    if (winnerInfo) {
+      winnerInfo.wins = Math.max(0, winnerInfo.wins - 1);
+      // If they were marked advanced due to this win, revert to active
+      if (winnerInfo.status === 'advanced' && targetStage.winsToAdvance && winnerInfo.wins < targetStage.winsToAdvance) {
+        winnerInfo.status = 'active';
+      }
+    }
+  }
+  if (oldLoserId) {
+    const loserInfo = targetStage.teamStageInfo.find((t) => t.teamId === oldLoserId);
+    if (loserInfo) {
+      loserInfo.losses = Math.max(0, loserInfo.losses - 1);
+      // If they were eliminated due to this loss, revert to active
+      if (loserInfo.status === 'eliminated' && targetStage.eliminationThreshold && loserInfo.losses < targetStage.eliminationThreshold) {
+        loserInfo.status = 'active';
+      }
+    }
+  }
+
+  // Apply new result
+  const newWinnerId = newTeam1Score > newTeam2Score ? targetMatch.team1Id : targetMatch.team2Id;
+  const newLoserId = newTeam1Score > newTeam2Score ? targetMatch.team2Id : targetMatch.team1Id;
+
+  targetMatch.team1Score = newTeam1Score;
+  targetMatch.team2Score = newTeam2Score;
+  targetMatch.winnerId = newWinnerId;
+  targetMatch.loserId = newLoserId;
+
+  // Update new winner
+  if (newWinnerId) {
+    const winnerInfo = targetStage.teamStageInfo.find((t) => t.teamId === newWinnerId);
+    if (winnerInfo) {
+      winnerInfo.wins++;
+      if (targetStage.winsToAdvance && winnerInfo.wins >= targetStage.winsToAdvance && winnerInfo.status === 'active') {
+        winnerInfo.status = 'advanced';
+        cancelPendingMatches(targetStage, winnerInfo.teamId);
+      }
+    }
+  }
+
+  // Update new loser
+  if (newLoserId) {
+    const loserInfo = targetStage.teamStageInfo.find((t) => t.teamId === newLoserId);
+    if (loserInfo) {
+      loserInfo.losses++;
+      if (targetStage.eliminationThreshold && loserInfo.losses >= targetStage.eliminationThreshold) {
+        loserInfo.status = 'eliminated';
+        cancelPendingMatches(targetStage, loserInfo.teamId);
+      }
+    }
+  }
+
+  return tournament;
+}
+
+/**
  * Cancel any pending matches a team is involved in.
  * Frees up the opponent to be re-paired.
  */
@@ -429,10 +521,18 @@ function generateProgressivePairings(
   const groupMatches = stage.matches.filter((m) => m.groupId === groupId);
   const currentRound = group.currentRound;
 
-  // Find teams that have completed their current-round match
+  // Check courts threshold — only do progressive pairing when remaining
+  // pending matches in current round are fewer than available courts
   const currentRoundMatches = groupMatches.filter((m) => m.round === currentRound);
-  const completedTeamIds = new Set<string>();
+  const pendingInCurrentRound = currentRoundMatches.filter((m) => m.status === 'pending').length;
+  const courtsAvailable = stage.courts || 0;
 
+  // If courts is set and there are still enough pending matches to fill the courts, skip progressive pairing
+  if (courtsAvailable > 0 && pendingInCurrentRound >= courtsAvailable) {
+    return;
+  }
+
+  const completedTeamIds = new Set<string>();
   for (const match of currentRoundMatches) {
     if (match.status === 'completed') {
       if (match.team1Id) completedTeamIds.add(match.team1Id);
@@ -442,7 +542,6 @@ function generateProgressivePairings(
 
   // Determine the next round number for progressive matches
   const nextRound = currentRound + 1;
-
   // Find teams already paired for next round
   const nextRoundMatches = groupMatches.filter((m) => m.round === nextRound);
   const alreadyPairedNextRound = new Set<string>();

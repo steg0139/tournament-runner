@@ -354,4 +354,59 @@ router.delete('/tournaments/:id', async (req: Request, res: Response) => {
   }
 });
 
+// Edit a match result (revert old result, apply new one)
+router.put(
+  '/tournaments/:id/matches/:matchId/edit',
+  async (req: Request, res: Response) => {
+    try {
+      const { id, matchId } = req.params;
+      const { team1Score, team2Score } = req.body;
+
+      if (team1Score == null || team2Score == null) {
+        return res.status(400).json({ error: 'Both scores are required' });
+      }
+      if (team1Score === team2Score) {
+        return res.status(400).json({ error: 'Ties are not allowed' });
+      }
+
+      const tournament = await getTournament(id);
+      if (!tournament) {
+        return res.status(404).json({ error: 'Tournament not found' });
+      }
+
+      if (isMultiStage(tournament)) {
+        // Use stage engine to revert and re-apply
+        const { revertAndReScore } = await import('./stageEngine');
+        try {
+          const updated = revertAndReScore(tournament, matchId, team1Score, team2Score);
+          updated.updatedAt = new Date().toISOString();
+          await updateTournament(updated);
+          return res.json(updated);
+        } catch (e: any) {
+          return res.status(400).json({ error: e.message });
+        }
+      }
+
+      // Single format: find match and update
+      const match = tournament.matches.find((m) => m.id === matchId);
+      if (!match) {
+        return res.status(404).json({ error: 'Match not found' });
+      }
+
+      // Just update the scores and winner — don't change advancement for single format
+      match.team1Score = team1Score;
+      match.team2Score = team2Score;
+      match.winnerId = team1Score > team2Score ? match.team1Id : match.team2Id;
+      match.loserId = team1Score > team2Score ? match.team2Id : match.team1Id;
+
+      tournament.updatedAt = new Date().toISOString();
+      await updateTournament(tournament);
+      res.json(tournament);
+    } catch (error) {
+      console.error('Error editing match:', error);
+      res.status(500).json({ error: 'Failed to edit match' });
+    }
+  }
+);
+
 export default router;

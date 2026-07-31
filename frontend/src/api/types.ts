@@ -65,6 +65,7 @@ export interface Stage {
   eliminationThreshold?: number;
   advancementCount?: number;
   winsToAdvance?: number;
+  courts?: number;
   groups: Group[];
   matches: Match[];
   teamStageInfo: TeamStageInfo[];
@@ -119,6 +120,7 @@ export interface CreateMultiStageTournamentRequest {
     eliminationThreshold?: number;
     advancementCount?: number;
     winsToAdvance?: number;
+    courts?: number;
   }[];
 }
 

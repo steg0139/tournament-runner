@@ -7,6 +7,7 @@ export interface StageConfig {
   eliminationThreshold?: number;
   advancementCount?: number;
   winsToAdvance?: number;
+  courts?: number;
 }
 
 interface MultiStageCreateFormProps {
@@ -201,6 +202,22 @@ export function MultiStageCreateForm({ stages, onChange }: MultiStageCreateFormP
                     placeholder="0 = use top N"
                   />
                   <p className="text-xs text-gray-500 mt-0.5">0 = advance top N teams. Set to e.g. 3 to advance once a team hits 3 wins.</p>
+                </div>
+              )}
+
+              {/* Courts/Boards available */}
+              {stage.format === 'swiss' && (
+                <div>
+                  <label className="text-xs text-gray-400 mb-1 block">Courts / Boards</label>
+                  <input
+                    type="number"
+                    min="0"
+                    max="50"
+                    value={stage.courts || 0}
+                    onChange={(e) => updateStage(index, { courts: parseInt(e.target.value) || undefined })}
+                    className="w-full bg-gray-900 border border-gray-600 rounded px-3 py-2 text-sm text-white focus:border-blue-500 focus:outline-none"
+                  />
+                  <p className="text-xs text-gray-500 mt-0.5">Next round matchups appear when fewer than this many games remain. 0 = wait for full round.</p>
                 </div>
               )}
             </div>

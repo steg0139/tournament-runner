@@ -40,12 +40,24 @@ export function TournamentPage() {
     if (!tournament || !selectedMatch) return;
 
     try {
-      const updated = await api.updateScore(
-        tournament.id,
-        selectedMatch.id,
-        team1Score,
-        team2Score
-      );
+      let updated: AnyTournament;
+      if (selectedMatch.status === 'completed') {
+        // Editing an existing result
+        updated = await api.editScore(
+          tournament.id,
+          selectedMatch.id,
+          team1Score,
+          team2Score
+        );
+      } else {
+        // New score entry
+        updated = await api.updateScore(
+          tournament.id,
+          selectedMatch.id,
+          team1Score,
+          team2Score
+        );
+      }
       setTournament(updated);
       setSelectedMatch(null);
     } catch (e: any) {

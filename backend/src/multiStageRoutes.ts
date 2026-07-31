@@ -159,6 +159,7 @@ router.post('/tournaments/multi-stage', async (req: Request, res: Response) => {
       eliminationThreshold: stageDef.eliminationThreshold,
       advancementCount: stageDef.advancementCount,
       winsToAdvance: stageDef.winsToAdvance,
+      courts: stageDef.courts,
       groups: [],
       matches: [],
       teamStageInfo: [],

@@ -67,6 +67,7 @@ export interface Stage {
   eliminationThreshold?: number;
   advancementCount?: number;
   winsToAdvance?: number;          // Teams auto-advance when reaching this win count
+  courts?: number;                 // Number of available courts/boards — progressive pairing starts when pending matches < this
   groups: Group[];
   matches: Match[];
   teamStageInfo: TeamStageInfo[];
@@ -121,6 +122,7 @@ export interface CreateMultiStageTournamentRequest {
     eliminationThreshold?: number;
     advancementCount?: number;
     winsToAdvance?: number;
+    courts?: number;
   }[];
 }
 

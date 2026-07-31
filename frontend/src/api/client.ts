@@ -40,6 +40,12 @@ export const api = {
       body: JSON.stringify({ team1Score, team2Score }),
     }),
 
+  editScore: (tournamentId: string, matchId: string, team1Score: number, team2Score: number) =>
+    request<AnyTournament>(`/tournaments/${tournamentId}/matches/${matchId}/edit`, {
+      method: 'PUT',
+      body: JSON.stringify({ team1Score, team2Score }),
+    }),
+
   generateNextSwissRound: (tournamentId: string) =>
     request<Tournament>(`/tournaments/${tournamentId}/swiss/next-round`, {
       method: 'POST',

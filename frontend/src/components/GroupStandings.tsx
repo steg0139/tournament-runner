@@ -257,7 +257,9 @@ function MatchList({
           </p>
           <div className="space-y-2">
             {roundMatches.map((match) => {
-              const isClickable = match.status !== 'completed' && match.team1Id && match.team2Id;
+              const isNewScore = match.status !== 'completed' && match.team1Id && match.team2Id;
+              const isEditable = match.status === 'completed' && match.team2Id; // not a bye
+              const isClickable = isNewScore || isEditable;
               const isBye = !match.team2Id;
 
               return (
@@ -265,11 +267,11 @@ function MatchList({
                   key={match.id}
                   onClick={isClickable && onMatchClick ? () => onMatchClick(match) : undefined}
                   className={`flex items-center justify-between px-3 py-2.5 rounded-lg text-sm ${
-                    isClickable
+                    isNewScore
                       ? 'bg-blue-900/20 border border-blue-500/50 cursor-pointer hover:border-blue-400 active:bg-blue-900/40'
-                      : match.status === 'completed'
-                      ? 'bg-gray-700/30'
-                      : 'bg-gray-900/30'
+                      : isEditable
+                      ? 'bg-gray-700/30 cursor-pointer hover:bg-gray-700/50 active:bg-gray-600/50'
+                      : 'bg-gray-700/30'
                   }`}
                 >
                   <span className={`flex-1 truncate ${match.winnerId === match.team1Id ? 'text-green-400 font-medium' : ''}`}>
