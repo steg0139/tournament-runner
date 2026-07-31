@@ -290,6 +290,24 @@ export function generateGroupSwissRound(
 }
 
 /**
+ * Cancel any pending matches a team is involved in.
+ * Frees up the opponent to be re-paired.
+ */
+function cancelPendingMatches(stage: Stage, teamId: string): void {
+  const pendingMatches = stage.matches.filter(
+    (m) => m.status === 'pending' && (m.team1Id === teamId || m.team2Id === teamId)
+  );
+
+  for (const match of pendingMatches) {
+    // Remove the match entirely
+    const index = stage.matches.indexOf(match);
+    if (index !== -1) {
+      stage.matches.splice(index, 1);
+    }
+  }
+}
+
+/**
  * Process a score update for a multi-stage tournament match.
  * Handles: score recording, elimination checks, group/stage completion, advancement.
  */
@@ -356,6 +374,8 @@ export function processScoreUpdate(
       winnerInfo.status === 'active'
     ) {
       winnerInfo.status = 'advanced';
+      // Cancel any pending matches this team is in
+      cancelPendingMatches(targetStage, winnerInfo.teamId);
     }
   }
   if (loserInfo) {
@@ -366,6 +386,8 @@ export function processScoreUpdate(
       loserInfo.losses >= targetStage.eliminationThreshold
     ) {
       loserInfo.status = 'eliminated';
+      // Cancel any pending matches this team is in
+      cancelPendingMatches(targetStage, loserInfo.teamId);
     }
   }
 
@@ -429,15 +451,25 @@ function generateProgressivePairings(
     if (match.team2Id) alreadyPairedNextRound.add(match.team2Id);
   }
 
-  // Available teams: completed current round, not already paired for next, still active
+  // Available teams: completed current round, not already paired for next, still active,
+  // and not in any other pending match
   const activeTeamIds = new Set(
     stage.teamStageInfo
       .filter((t) => t.groupId === groupId && t.status === 'active')
       .map((t) => t.teamId)
   );
 
+  // Also exclude teams that are in ANY pending match (not just next round)
+  const teamsInPendingMatches = new Set<string>();
+  for (const m of stage.matches) {
+    if (m.status === 'pending' && m.groupId === groupId) {
+      if (m.team1Id) teamsInPendingMatches.add(m.team1Id);
+      if (m.team2Id) teamsInPendingMatches.add(m.team2Id);
+    }
+  }
+
   const availableTeamIds = [...completedTeamIds].filter(
-    (id) => !alreadyPairedNextRound.has(id) && activeTeamIds.has(id)
+    (id) => !alreadyPairedNextRound.has(id) && activeTeamIds.has(id) && !teamsInPendingMatches.has(id)
   );
 
   if (availableTeamIds.length < 2) return;
