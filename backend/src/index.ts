@@ -8,8 +8,6 @@ const app = express();
 
 app.use(cors());
 app.use(express.json());
-
-// Mount routes at /api (for local dev proxy) and root (for API Gateway)
 app.use('/api', routes);
 app.use('/api', multiStageRoutes);
 app.use('/', routes);
@@ -28,5 +26,7 @@ if (process.env.NODE_ENV !== 'production') {
   });
 }
 
-// Lambda handler
-export const handler = serverless(app);
+// Lambda handler - strip API Gateway stage prefix
+export const handler = serverless(app, {
+  basePath: '/prod',
+});
