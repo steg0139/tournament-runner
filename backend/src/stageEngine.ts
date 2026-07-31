@@ -813,31 +813,32 @@ function checkGroupCompletion(
   const activeTeams = stage.teamStageInfo.filter(
     (t) => t.groupId === groupId && t.status === 'active'
   );
+  const advancedTeams = stage.teamStageInfo.filter(
+    (t) => t.groupId === groupId && t.status === 'advanced'
+  );
 
-  const advancementCount = stage.advancementCount || activeTeams.length;
+  const advancementCount = stage.advancementCount || 0;
 
-  // Condition 1: active teams == advancement count (all others eliminated/advanced)
-  if (activeTeams.length <= advancementCount) {
+  // Condition 1: enough teams have advanced (hit winsToAdvance)
+  if (advancementCount > 0 && advancedTeams.length >= advancementCount) {
     group.status = 'completed';
     return;
   }
 
-  // Condition 2: winsToAdvance — check if enough teams have hit the win threshold
-  if (stage.winsToAdvance) {
-    const qualifiedTeams = stage.teamStageInfo.filter(
-      (t) => t.groupId === groupId && (t.wins >= stage.winsToAdvance! || t.status === 'advanced')
-    );
-    if (qualifiedTeams.length >= advancementCount) {
-      group.status = 'completed';
-      return;
-    }
+  // Condition 2: active teams + advanced = advancementCount (everyone else eliminated)
+  if (advancementCount > 0 && (activeTeams.length + advancedTeams.length) <= advancementCount) {
+    group.status = 'completed';
+    return;
   }
 
-  // Condition 3: no valid pairings remain
-  const canPair = canGenerateMorePairings(activeTeams, groupMatches, stage.teamStageInfo.filter(t => t.groupId === groupId));
-  if (!canPair) {
+  // Condition 3: no active teams left at all (everyone advanced or eliminated)
+  if (activeTeams.length === 0) {
     group.status = 'completed';
+    return;
   }
+
+  // Do NOT auto-complete just because pairings are hard — let the user click "Next Round"
+  // which uses the full pairing algorithm that allows cross-record matches
 }
 
 /**
