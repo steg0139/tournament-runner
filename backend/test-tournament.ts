@@ -75,9 +75,9 @@ async function main() {
   console.log(`Status: ${current.status}`);
   console.log(`Stage: ${current.stages[0].name} (${current.stages[0].status})`);
 
-  // 3. Simulate rounds
+  // 3. Simulate rounds — stop before round 3 scoring
   let roundsPlayed = 0;
-  const maxRounds = 10;
+  const maxRounds = 2; // Only play rounds 1 and 2
 
   while (roundsPlayed < maxRounds) {
     const stage = current.stages[0];
