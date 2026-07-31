@@ -451,7 +451,7 @@ export function processScoreUpdate(
   }
 
   if (targetStage.status === 'completed') {
-    throw new Error('Cannot update score for a completed stage');
+    throw new Error('Cannot enter new scores for a completed stage. Use edit instead.');
   }
 
   if (!targetMatch.team1Id || !targetMatch.team2Id) {
@@ -805,13 +805,18 @@ function checkGroupCompletion(
   const group = stage.groups.find((g) => g.id === groupId);
   if (!group || group.status === 'completed') return;
 
+  // Never complete a group while it still has pending matches
+  const groupMatches = stage.matches.filter((m) => m.groupId === groupId);
+  const pendingMatches = groupMatches.filter((m) => m.status === 'pending');
+  if (pendingMatches.length > 0) return;
+
   const activeTeams = stage.teamStageInfo.filter(
     (t) => t.groupId === groupId && t.status === 'active'
   );
 
   const advancementCount = stage.advancementCount || activeTeams.length;
 
-  // Condition 1: active teams == advancement count (all others eliminated)
+  // Condition 1: active teams == advancement count (all others eliminated/advanced)
   if (activeTeams.length <= advancementCount) {
     group.status = 'completed';
     return;
@@ -820,7 +825,7 @@ function checkGroupCompletion(
   // Condition 2: winsToAdvance — check if enough teams have hit the win threshold
   if (stage.winsToAdvance) {
     const qualifiedTeams = stage.teamStageInfo.filter(
-      (t) => t.groupId === groupId && t.wins >= stage.winsToAdvance!
+      (t) => t.groupId === groupId && (t.wins >= stage.winsToAdvance! || t.status === 'advanced')
     );
     if (qualifiedTeams.length >= advancementCount) {
       group.status = 'completed';
@@ -828,16 +833,10 @@ function checkGroupCompletion(
     }
   }
 
-  // Condition 3: check if current round is complete and no valid pairings remain
-  const groupMatches = stage.matches.filter((m) => m.groupId === groupId);
-  const pendingMatches = groupMatches.filter((m) => m.status === 'pending');
-
-  if (pendingMatches.length === 0) {
-    const canPair = canGenerateMorePairings(activeTeams, groupMatches, stage.teamStageInfo.filter(t => t.groupId === groupId));
-    if (!canPair) {
-      // No more pairings possible — group is done, advancement will pick top N via tiebreakers
-      group.status = 'completed';
-    }
+  // Condition 3: no valid pairings remain
+  const canPair = canGenerateMorePairings(activeTeams, groupMatches, stage.teamStageInfo.filter(t => t.groupId === groupId));
+  if (!canPair) {
+    group.status = 'completed';
   }
 }
 
