@@ -152,8 +152,9 @@ export function MultiStageCreateForm({ stages, onChange }: MultiStageCreateFormP
                     inputMode="numeric"
                     min="1"
                     max="16"
-                    value={stage.groupCount ?? ''}
-                    onChange={(e) => updateStage(index, { groupCount: e.target.value === '' ? 1 : parseInt(e.target.value) })}
+                    value={stage.groupCount === 0 ? '' : stage.groupCount}
+                    onChange={(e) => updateStage(index, { groupCount: e.target.value === '' ? 0 : parseInt(e.target.value) || 0 })}
+                    onBlur={(e) => { if (!e.target.value || parseInt(e.target.value) < 1) updateStage(index, { groupCount: 1 }); }}
                     className="w-full bg-gray-900 border border-gray-600 rounded px-3 py-2 text-sm text-white focus:border-blue-500 focus:outline-none"
                   />
                 </div>
