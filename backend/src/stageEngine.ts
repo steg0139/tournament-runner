@@ -378,7 +378,22 @@ export function revertAndReScore(
     }
   }
 
+  // Cancel all pending progressive matches in this group and regenerate
+  if (targetMatch.groupId) {
+    cancelAllPendingInGroup(targetStage, targetMatch.groupId);
+    generateProgressivePairings(tournament, targetStage, targetMatch.groupId);
+  }
+
   return tournament;
+}
+
+/**
+ * Cancel ALL pending matches in a group (used after editing a result).
+ */
+function cancelAllPendingInGroup(stage: Stage, groupId: string): void {
+  stage.matches = stage.matches.filter(
+    (m) => !(m.groupId === groupId && m.status === 'pending')
+  );
 }
 
 /**
