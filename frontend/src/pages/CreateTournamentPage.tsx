@@ -46,11 +46,25 @@ export function CreateTournamentPage() {
 
     try {
       if (structure === 'multi_stage') {
+        // Sanitize stage values — ensure numbers are actual numbers, not undefined/NaN
+        const sanitizedStages = stages.map((s, i) => {
+          const isFinal = i === stages.length - 1;
+          return {
+            name: s.name || `Stage ${i + 1}`,
+            format: s.format,
+            groupCount: Math.max(1, s.groupCount || 1),
+            eliminationThreshold: s.format === 'swiss' ? Math.max(1, s.eliminationThreshold || 2) : undefined,
+            advancementCount: !isFinal ? Math.max(1, s.advancementCount || 2) : undefined,
+            winsToAdvance: s.winsToAdvance && s.winsToAdvance > 0 ? s.winsToAdvance : undefined,
+            courts: s.courts && s.courts > 0 ? s.courts : undefined,
+          };
+        });
+
         const tournament = await api.createMultiStageTournament({
           name: name.trim(),
           sport,
           teams: teams.length > 0 ? teams : [],
-          stages,
+          stages: sanitizedStages,
         });
         navigate(`/tournament/${tournament.id}`);
       } else {

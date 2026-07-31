@@ -42,6 +42,8 @@ export function MultiStageCreateForm({ stages, onChange }: MultiStageCreateFormP
     // Clear elimination threshold if not Swiss
     if (updates.format && updates.format !== 'swiss') {
       newStages[index].eliminationThreshold = undefined;
+      newStages[index].winsToAdvance = undefined;
+      newStages[index].courts = undefined;
     }
     // Set default elimination threshold if switching to Swiss
     if (updates.format === 'swiss' && !newStages[index].eliminationThreshold) {
@@ -147,10 +149,11 @@ export function MultiStageCreateForm({ stages, onChange }: MultiStageCreateFormP
                   <label className="text-xs text-gray-400 mb-1 block">Groups</label>
                   <input
                     type="number"
+                    inputMode="numeric"
                     min="1"
                     max="16"
-                    value={stage.groupCount}
-                    onChange={(e) => updateStage(index, { groupCount: parseInt(e.target.value) || 1 })}
+                    value={stage.groupCount ?? ''}
+                    onChange={(e) => updateStage(index, { groupCount: e.target.value === '' ? 1 : parseInt(e.target.value) })}
                     className="w-full bg-gray-900 border border-gray-600 rounded px-3 py-2 text-sm text-white focus:border-blue-500 focus:outline-none"
                   />
                 </div>
@@ -162,10 +165,11 @@ export function MultiStageCreateForm({ stages, onChange }: MultiStageCreateFormP
                   <label className="text-xs text-gray-400 mb-1 block">Losses to eliminate</label>
                   <input
                     type="number"
+                    inputMode="numeric"
                     min="1"
                     max="5"
-                    value={stage.eliminationThreshold || 2}
-                    onChange={(e) => updateStage(index, { eliminationThreshold: parseInt(e.target.value) || 2 })}
+                    value={stage.eliminationThreshold ?? ''}
+                    onChange={(e) => updateStage(index, { eliminationThreshold: e.target.value === '' ? undefined : parseInt(e.target.value) })}
                     className="w-full bg-gray-900 border border-gray-600 rounded px-3 py-2 text-sm text-white focus:border-blue-500 focus:outline-none"
                   />
                 </div>
@@ -179,10 +183,11 @@ export function MultiStageCreateForm({ stages, onChange }: MultiStageCreateFormP
                   </label>
                   <input
                     type="number"
+                    inputMode="numeric"
                     min="1"
                     max="32"
-                    value={stage.advancementCount || 2}
-                    onChange={(e) => updateStage(index, { advancementCount: parseInt(e.target.value) || 2 })}
+                    value={stage.advancementCount ?? ''}
+                    onChange={(e) => updateStage(index, { advancementCount: e.target.value === '' ? undefined : parseInt(e.target.value) })}
                     className="w-full bg-gray-900 border border-gray-600 rounded px-3 py-2 text-sm text-white focus:border-blue-500 focus:outline-none"
                   />
                 </div>
@@ -191,17 +196,18 @@ export function MultiStageCreateForm({ stages, onChange }: MultiStageCreateFormP
               {/* Wins to Advance (Swiss non-final) */}
               {!isFinal && stage.format === 'swiss' && (
                 <div>
-                  <label className="text-xs text-gray-400 mb-1 block">Wins to advance (optional)</label>
+                  <label className="text-xs text-gray-400 mb-1 block">Wins to advance</label>
                   <input
                     type="number"
+                    inputMode="numeric"
                     min="0"
                     max="20"
-                    value={stage.winsToAdvance || 0}
-                    onChange={(e) => updateStage(index, { winsToAdvance: parseInt(e.target.value) || undefined })}
+                    value={stage.winsToAdvance ?? ''}
+                    onChange={(e) => updateStage(index, { winsToAdvance: e.target.value === '' ? undefined : parseInt(e.target.value) })}
                     className="w-full bg-gray-900 border border-gray-600 rounded px-3 py-2 text-sm text-white focus:border-blue-500 focus:outline-none"
-                    placeholder="0 = use top N"
+                    placeholder="optional"
                   />
-                  <p className="text-xs text-gray-500 mt-0.5">0 = advance top N teams. Set to e.g. 3 to advance once a team hits 3 wins.</p>
+                  <p className="text-xs text-gray-500 mt-0.5">Leave empty = advance top N. Set to e.g. 3 to auto-advance at 3 wins.</p>
                 </div>
               )}
 
@@ -211,13 +217,15 @@ export function MultiStageCreateForm({ stages, onChange }: MultiStageCreateFormP
                   <label className="text-xs text-gray-400 mb-1 block">Courts / Boards</label>
                   <input
                     type="number"
+                    inputMode="numeric"
                     min="0"
                     max="50"
-                    value={stage.courts || 0}
-                    onChange={(e) => updateStage(index, { courts: parseInt(e.target.value) || undefined })}
+                    value={stage.courts ?? ''}
+                    onChange={(e) => updateStage(index, { courts: e.target.value === '' ? undefined : parseInt(e.target.value) })}
                     className="w-full bg-gray-900 border border-gray-600 rounded px-3 py-2 text-sm text-white focus:border-blue-500 focus:outline-none"
+                    placeholder="optional"
                   />
-                  <p className="text-xs text-gray-500 mt-0.5">Next round matchups appear when fewer than this many games remain. 0 = wait for full round.</p>
+                  <p className="text-xs text-gray-500 mt-0.5">Next round matchups appear when fewer games remain than this. Leave empty = wait for full round.</p>
                 </div>
               )}
             </div>
