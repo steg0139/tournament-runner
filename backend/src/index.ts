@@ -8,8 +8,12 @@ const app = express();
 
 app.use(cors());
 app.use(express.json());
+
+// Mount routes at /api (for local dev proxy) and root (for API Gateway)
 app.use('/api', routes);
 app.use('/api', multiStageRoutes);
+app.use('/', routes);
+app.use('/', multiStageRoutes);
 
 // Health check
 app.get('/health', (_req, res) => {
