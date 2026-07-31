@@ -30,6 +30,12 @@ function initializeFirstStage(
 ): void {
   const teams = tournament.teams;
 
+  // Ensure arrays are initialized (DynamoDB might return undefined for empty arrays)
+  if (!firstStage.matches) firstStage.matches = [];
+  if (!firstStage.groups) firstStage.groups = [];
+  if (!firstStage.teamStageInfo) firstStage.teamStageInfo = [];
+  if (!firstStage.advancedTeamIds) firstStage.advancedTeamIds = [];
+
   // Always use groups (even groupCount=1) for consistent Swiss round handling
   if (firstStage.format === 'swiss' || firstStage.groupCount > 1) {
     const effectiveGroupCount = Math.max(firstStage.groupCount, 1);
@@ -279,9 +285,9 @@ router.post('/tournaments/:id/multi-stage/start', async (req: Request, res: Resp
 
     await updateTournament(tournament);
     res.json(tournament);
-  } catch (error) {
-    console.error('Error starting tournament:', error);
-    res.status(500).json({ error: 'Failed to start tournament' });
+  } catch (error: any) {
+    console.error('Error starting tournament:', error?.message || error);
+    res.status(500).json({ error: error?.message || 'Failed to start tournament' });
   }
 });
 
