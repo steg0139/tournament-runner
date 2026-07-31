@@ -119,8 +119,7 @@ function MatchCard({
   getTeamName: (id: string | null) => string;
   onClick: () => void;
 }) {
-  const isClickable =
-    match.status !== 'completed' && match.team1Id && match.team2Id;
+  const isClickable = !!(match.team1Id && match.team2Id);
   const isComplete = match.status === 'completed';
 
   return (
