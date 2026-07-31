@@ -54,7 +54,7 @@ function calculatePointDiff(
 }
 
 /**
- * Swiss tiebreaker comparison: wins desc, then SOS desc, then point differential desc, then seed asc.
+ * Swiss tiebreaker comparison: wins desc, losses asc, SOS desc, point differential desc, seed asc.
  */
 function swissTiebreaker(
   a: TeamStageInfo,
@@ -65,15 +65,17 @@ function swissTiebreaker(
 ): number {
   // Primary: wins desc
   if (b.wins !== a.wins) return b.wins - a.wins;
-  // Secondary: strength of schedule desc
+  // Secondary: fewer losses first
+  if (a.losses !== b.losses) return a.losses - b.losses;
+  // Tertiary: strength of schedule desc
   const sosA = calculateSOS(a.teamId, groupMatches, allGroupInfo);
   const sosB = calculateSOS(b.teamId, groupMatches, allGroupInfo);
   if (sosB !== sosA) return sosB - sosA;
-  // Tertiary: point differential desc
+  // Quaternary: point differential desc
   const diffA = calculatePointDiff(a.teamId, groupMatches);
   const diffB = calculatePointDiff(b.teamId, groupMatches);
   if (diffB !== diffA) return diffB - diffA;
-  // Quaternary: original seed asc
+  // Last resort: original seed asc
   const teamA = teams.find((t) => t.id === a.teamId);
   const teamB = teams.find((t) => t.id === b.teamId);
   return (teamA?.seed || 999) - (teamB?.seed || 999);
@@ -191,7 +193,7 @@ export function generateGroupSwissRound(
         .map((t) => [t.teamId, t])
     );
 
-    // For round 1, randomize who gets the bye. Later rounds: lowest-ranked without a bye.
+    // Give bye to the highest-ranked team (best SOS) that hasn't had a bye
     const eligibleForBye = sortedTeams.filter((t) => {
       const info = teamStageInfoMap.get(t.id);
       return info && info.byesReceived === 0;
@@ -202,22 +204,31 @@ export function generateGroupSwissRound(
       // Random bye for round 1
       const randomIndex = Math.floor(Math.random() * eligibleForBye.length);
       byeTeam = eligibleForBye[randomIndex];
-    } else {
-      // Lowest-ranked team without a bye
-      for (let i = sortedTeams.length - 1; i >= 0; i--) {
-        const info = teamStageInfoMap.get(sortedTeams[i].id);
-        if (info && info.byesReceived === 0) {
-          byeTeam = sortedTeams[i];
-          break;
-        }
+      console.log(`[BYE R${roundNumber}] Random bye assigned to: ${byeTeam.name}`);
+    } else if (eligibleForBye.length > 0) {
+      // Highest-ranked gets the bye — log the ranking
+      const allGroupInfo = stage.teamStageInfo.filter((t) => t.groupId === group.id);
+      const groupMatches = stage.matches.filter((m) => m.groupId === group.id);
+      const eligibleInfo = allGroupInfo
+        .filter((t) => eligibleForBye.some((e) => e.id === t.teamId))
+        .sort((a, b) => swissTiebreaker(a, b, groupMatches, allGroupInfo, eligibleForBye));
+
+      console.log(`[BYE R${roundNumber}] Eligible teams for bye (ranked):`);
+      for (const info of eligibleInfo) {
+        const team = eligibleForBye.find((t) => t.id === info.teamId);
+        const sos = calculateSOS(info.teamId, groupMatches, allGroupInfo);
+        const diff = calculatePointDiff(info.teamId, groupMatches);
+        console.log(`  ${team?.name}: ${info.wins}W-${info.losses}L SOS:${sos} +/-:${diff} seed:${team?.seed}`);
       }
+
+      byeTeam = eligibleForBye.find((t) => t.id === eligibleInfo[0]?.teamId);
+      console.log(`[BYE R${roundNumber}] → Bye assigned to: ${byeTeam?.name}`);
     }
 
     if (byeTeam) {
       const info = teamStageInfoMap.get(byeTeam.id);
       paired.add(byeTeam.id);
 
-      // Update team stage info immediately for the bye
       if (info) {
         info.wins++;
         info.byesReceived++;
@@ -530,9 +541,9 @@ export function processScoreUpdate(
 }
 
 /**
- * Generate progressive pairings: after a match completes, pair teams that are
- * done with their current-round match and can play each other (same record only).
- * When the full round is complete, generates the complete next round with proper Swiss logic.
+ * Generate progressive pairings: after a match completes, generate exactly ONE
+ * next-round match if needed. Progressive matches are locked in.
+ * When the full round completes, pair remaining unpaired teams.
  */
 function generateProgressivePairings(
   tournament: MultiStageTournament,
@@ -542,42 +553,161 @@ function generateProgressivePairings(
   const group = stage.groups.find((g) => g.id === groupId);
   if (!group || group.status === 'completed') return;
 
-  const groupMatches = stage.matches.filter((m) => m.groupId === groupId);
   const currentRound = group.currentRound;
-  const currentRoundMatches = groupMatches.filter((m) => m.round === currentRound);
+  const currentRoundMatches = stage.matches.filter(
+    (m) => m.groupId === groupId && m.round === currentRound
+  );
+  const nextRound = currentRound + 1;
 
   // Check if the entire current round is complete
   const allCurrentRoundDone = currentRoundMatches.length > 0 &&
     currentRoundMatches.every((m) => m.status === 'completed');
 
   if (allCurrentRoundDone) {
-    // Full round complete — generate the next round using the standard Swiss logic
-    group.currentRound = currentRound + 1;
-    const groupTeams = tournament.teams.filter((t) => group.teamIds.includes(t.id));
-    const newMatches = generateGroupSwissRound(
-      tournament.id,
-      group,
-      stage,
-      groupTeams
-    );
-    stage.matches.push(...newMatches);
+    // Full round complete — determine bye recipient FIRST, then pair remaining
+    group.currentRound = nextRound;
 
-    // If no matches generated, revert the round bump (group might be done)
-    if (newMatches.length === 0) {
+    // All active teams
+    const activeTeamIds = stage.teamStageInfo
+      .filter((t) => t.groupId === groupId && t.status === 'active')
+      .map((t) => t.teamId);
+
+    // Find who's already paired in next round (locked progressive matches)
+    const existingNextRound = stage.matches.filter(
+      (m) => m.groupId === groupId && m.round === nextRound
+    );
+    const alreadyPaired = new Set<string>();
+    for (const m of existingNextRound) {
+      if (m.team1Id) alreadyPaired.add(m.team1Id);
+      if (m.team2Id) alreadyPaired.add(m.team2Id);
+    }
+
+    const unpaired = activeTeamIds.filter((id) => !alreadyPaired.has(id));
+
+    // If total active teams (paired + unpaired) is odd, assign bye to highest-ranked BEFORE pairing
+    const totalActive = activeTeamIds.length;
+    let byeTeamId: string | null = null;
+
+    if (totalActive % 2 !== 0 && unpaired.length % 2 !== 0) {
+      // Need a bye from the unpaired set
+      const allGroupInfo = stage.teamStageInfo.filter((t) => t.groupId === groupId);
+      const groupMatches = stage.matches.filter((m) => m.groupId === groupId);
+      const unpairedInfo = allGroupInfo
+        .filter((t) => unpaired.includes(t.teamId) && t.byesReceived === 0)
+        .sort((a, b) => swissTiebreaker(a, b, groupMatches, allGroupInfo, tournament.teams));
+
+      if (unpairedInfo.length > 0) {
+        console.log(`[BYE Progressive R${nextRound}] Eligible teams for bye (ranked):`);
+        for (const info of unpairedInfo) {
+          const team = tournament.teams.find((t) => t.id === info.teamId);
+          const sos = calculateSOS(info.teamId, groupMatches, allGroupInfo);
+          const diff = calculatePointDiff(info.teamId, groupMatches);
+          console.log(`  ${team?.name}: ${info.wins}W-${info.losses}L SOS:${sos} +/-:${diff} seed:${team?.seed}`);
+        }
+
+        // Highest-ranked gets the bye
+        byeTeamId = unpairedInfo[0].teamId;
+        const byeTeam = tournament.teams.find((t) => t.id === byeTeamId);
+        console.log(`[BYE Progressive R${nextRound}] → Bye assigned to: ${byeTeam?.name}`);
+
+        const byeInfo = stage.teamStageInfo.find((t) => t.teamId === byeTeamId);
+        if (byeInfo) {
+          byeInfo.wins++;
+          byeInfo.byesReceived++;
+        }
+        stage.matches.push({
+          id: uuidv4(), tournamentId: tournament.id, stageId: stage.id, groupId,
+          round: nextRound, position: stage.matches.filter((m) => m.groupId === groupId && m.round === nextRound).length,
+          team1Id: byeTeamId, team2Id: null, team1Score: null, team2Score: null,
+          winnerId: byeTeamId, loserId: null, bracket: 'swiss', status: 'completed',
+          nextMatchId: null, nextMatchSlot: null,
+        });
+      }
+    }
+
+    // Now pair remaining unpaired teams (excluding bye recipient)
+    const toPair = unpaired.filter((id) => id !== byeTeamId);
+
+    if (toPair.length >= 2) {
+      const allGroupInfo = stage.teamStageInfo.filter((t) => t.groupId === groupId);
+      const groupMatches = stage.matches.filter((m) => m.groupId === groupId);
+      const toPairInfo = allGroupInfo
+        .filter((t) => toPair.includes(t.teamId))
+        .sort((a, b) => swissTiebreaker(a, b, groupMatches, allGroupInfo, tournament.teams));
+
+      const paired = new Set<string>();
+      for (let i = 0; i < toPairInfo.length; i++) {
+        if (paired.has(toPairInfo[i].teamId)) continue;
+        for (let j = i + 1; j < toPairInfo.length; j++) {
+          if (paired.has(toPairInfo[j].teamId)) continue;
+          const t1 = toPairInfo[i].teamId;
+          const t2 = toPairInfo[j].teamId;
+          const played = stage.matches.some(
+            (m) => m.groupId === groupId &&
+              ((m.team1Id === t1 && m.team2Id === t2) || (m.team1Id === t2 && m.team2Id === t1))
+          );
+          if (!played) {
+            paired.add(t1);
+            paired.add(t2);
+            stage.matches.push({
+              id: uuidv4(), tournamentId: tournament.id, stageId: stage.id, groupId,
+              round: nextRound, position: stage.matches.filter((m) => m.groupId === groupId && m.round === nextRound).length,
+              team1Id: t1, team2Id: t2, team1Score: null, team2Score: null,
+              winnerId: null, loserId: null, bracket: 'swiss', status: 'pending',
+              nextMatchId: null, nextMatchSlot: null,
+            });
+            break;
+          }
+        }
+      }
+    }
+
+    // If nothing was generated for next round at all, revert
+    if (stage.matches.filter((m) => m.groupId === groupId && m.round === nextRound).length === 0) {
       group.currentRound = currentRound;
     }
     return;
   }
 
-  // Mid-round: check courts threshold
-  const pendingInCurrentRound = currentRoundMatches.filter((m) => m.status === 'pending').length;
-  const courtsAvailable = stage.courts || 0;
+  // --- Mid-round: generate exactly ONE next match if needed ---
 
-  if (courtsAvailable > 0 && pendingInCurrentRound >= courtsAvailable) {
+  // If there's an odd number of active teams that still need pairing for next round,
+  // don't do progressive pairing — wait for the full round to complete.
+  // But if some are already progressively paired, check unpaired count instead.
+  const nextRoundExisting = stage.matches.filter(
+    (m) => m.groupId === groupId && m.round === nextRound
+  );
+  const alreadyPairedForNext = new Set<string>();
+  for (const m of nextRoundExisting) {
+    if (m.team1Id) alreadyPairedForNext.add(m.team1Id);
+    if (m.team2Id) alreadyPairedForNext.add(m.team2Id);
+  }
+  const activeTeamIdsAll = stage.teamStageInfo
+    .filter((t) => t.groupId === groupId && t.status === 'active')
+    .map((t) => t.teamId);
+  const unpairedActiveForNext = activeTeamIdsAll.filter((id) => !alreadyPairedForNext.has(id));
+
+  // Only block progressive pairing if ALL active teams still need pairing and count is odd
+  if (unpairedActiveForNext.length % 2 !== 0 && alreadyPairedForNext.size === 0) {
+    console.log(`[Progressive] Blocked by odd teams: ${unpairedActiveForNext.length} unpaired, none paired yet`);
     return;
   }
 
-  // Find teams that completed their current-round match
+  // Courts threshold check — only generate progressive matches when
+  // total pending matches (current + next round) are below court count
+  const pendingInCurrentRound = currentRoundMatches.filter((m) => m.status === 'pending').length;
+  const pendingInNextRound = stage.matches.filter(
+    (m) => m.groupId === groupId && m.round === nextRound && m.status === 'pending'
+  ).length;
+  const courtsAvailable = stage.courts || 0;
+  const totalPending = pendingInCurrentRound + pendingInNextRound;
+
+  if (courtsAvailable > 0 && totalPending >= courtsAvailable) {
+    console.log(`[Progressive] Blocked by courts: ${totalPending} total pending >= ${courtsAvailable} courts`);
+    return;
+  }
+
+  // Find available teams: done with current round, active, not in any pending match
   const completedTeamIds = new Set<string>();
   for (const match of currentRoundMatches) {
     if (match.status === 'completed') {
@@ -586,15 +716,12 @@ function generateProgressivePairings(
     }
   }
 
-  const nextRound = currentRound + 1;
-  const nextRoundMatches = stage.matches.filter((m) => m.groupId === groupId && m.round === nextRound);
   const alreadyPairedNextRound = new Set<string>();
-  for (const match of nextRoundMatches) {
-    if (match.team1Id) alreadyPairedNextRound.add(match.team1Id);
-    if (match.team2Id) alreadyPairedNextRound.add(match.team2Id);
+  for (const m of stage.matches.filter((m) => m.groupId === groupId && m.round === nextRound)) {
+    if (m.team1Id) alreadyPairedNextRound.add(m.team1Id);
+    if (m.team2Id) alreadyPairedNextRound.add(m.team2Id);
   }
 
-  // Available: completed current round, active, not already paired, not in any pending match
   const activeTeamIds = new Set(
     stage.teamStageInfo
       .filter((t) => t.groupId === groupId && t.status === 'active')
@@ -609,61 +736,60 @@ function generateProgressivePairings(
     }
   }
 
-  const availableTeamIds = [...completedTeamIds].filter(
+  const available = [...completedTeamIds].filter(
     (id) => !alreadyPairedNextRound.has(id) && activeTeamIds.has(id) && !teamsInPendingMatches.has(id)
   );
 
-  if (availableTeamIds.length < 2) return;
+  if (available.length < 2) return;
 
-  // Sort by standings
+  // Sort and find ONE match — prefer same record, fallback to cross-record
   const allGroupInfo = stage.teamStageInfo.filter((t) => t.groupId === groupId);
+  const groupMatches = stage.matches.filter((m) => m.groupId === groupId);
   const availableInfo = allGroupInfo
-    .filter((t) => availableTeamIds.includes(t.teamId))
-    .sort((a, b) => swissTiebreaker(a, b, stage.matches.filter((m) => m.groupId === groupId), allGroupInfo, tournament.teams));
+    .filter((t) => available.includes(t.teamId))
+    .sort((a, b) => swissTiebreaker(a, b, groupMatches, allGroupInfo, tournament.teams));
 
-  // Pair ONLY same-record teams (mid-round progressive)
-  const paired = new Set<string>();
+  // Try same-record first
   for (let i = 0; i < availableInfo.length; i++) {
-    if (paired.has(availableInfo[i].teamId)) continue;
-
     for (let j = i + 1; j < availableInfo.length; j++) {
-      if (paired.has(availableInfo[j].teamId)) continue;
-
+      if (availableInfo[i].wins !== availableInfo[j].wins) continue;
       const t1 = availableInfo[i].teamId;
       const t2 = availableInfo[j].teamId;
-
-      if (availableInfo[i].wins !== availableInfo[j].wins) continue;
-
-      const alreadyPlayed = stage.matches.some(
-        (m) =>
-          m.groupId === groupId &&
-          ((m.team1Id === t1 && m.team2Id === t2) ||
-           (m.team1Id === t2 && m.team2Id === t1))
+      const played = stage.matches.some(
+        (m) => m.groupId === groupId &&
+          ((m.team1Id === t1 && m.team2Id === t2) || (m.team1Id === t2 && m.team2Id === t1))
       );
-
-      if (!alreadyPlayed) {
-        paired.add(t1);
-        paired.add(t2);
-
+      if (!played) {
         stage.matches.push({
-          id: uuidv4(),
-          tournamentId: tournament.id,
-          stageId: stage.id,
-          groupId,
-          round: nextRound,
-          position: stage.matches.filter((m) => m.groupId === groupId && m.round === nextRound).length,
-          team1Id: t1,
-          team2Id: t2,
-          team1Score: null,
-          team2Score: null,
-          winnerId: null,
-          loserId: null,
-          bracket: 'swiss',
-          status: 'pending',
-          nextMatchId: null,
-          nextMatchSlot: null,
+          id: uuidv4(), tournamentId: tournament.id, stageId: stage.id, groupId,
+          round: nextRound, position: stage.matches.filter((m) => m.groupId === groupId && m.round === nextRound).length,
+          team1Id: t1, team2Id: t2, team1Score: null, team2Score: null,
+          winnerId: null, loserId: null, bracket: 'swiss', status: 'pending',
+          nextMatchId: null, nextMatchSlot: null,
         });
-        break; // Next i
+        return;
+      }
+    }
+  }
+
+  // No same-record available — try cross-record (adjacent in standings)
+  for (let i = 0; i < availableInfo.length; i++) {
+    for (let j = i + 1; j < availableInfo.length; j++) {
+      const t1 = availableInfo[i].teamId;
+      const t2 = availableInfo[j].teamId;
+      const played = stage.matches.some(
+        (m) => m.groupId === groupId &&
+          ((m.team1Id === t1 && m.team2Id === t2) || (m.team1Id === t2 && m.team2Id === t1))
+      );
+      if (!played) {
+        stage.matches.push({
+          id: uuidv4(), tournamentId: tournament.id, stageId: stage.id, groupId,
+          round: nextRound, position: stage.matches.filter((m) => m.groupId === groupId && m.round === nextRound).length,
+          team1Id: t1, team2Id: t2, team1Score: null, team2Score: null,
+          winnerId: null, loserId: null, bracket: 'swiss', status: 'pending',
+          nextMatchId: null, nextMatchSlot: null,
+        });
+        return;
       }
     }
   }
@@ -712,8 +838,16 @@ function checkGroupCompletion(
     return;
   }
 
-  // Do NOT auto-complete just because pairings are hard — let the user click "Next Round"
-  // which uses the full pairing algorithm that allows cross-record matches
+  // Condition 4: remaining active teams + advanced >= advancementCount
+  // and no more valid pairings exist — complete the group and let advancement pick the best
+  if (advancementCount > 0 && (activeTeams.length + advancedTeams.length) >= advancementCount) {
+    const groupMatches = stage.matches.filter((m) => m.groupId === groupId);
+    const canPair = canGenerateMorePairings(activeTeams, groupMatches, stage.teamStageInfo.filter(t => t.groupId === groupId));
+    if (!canPair) {
+      group.status = 'completed';
+      return;
+    }
+  }
 }
 
 /**
@@ -864,8 +998,7 @@ function getAdvancingTeams(
   tournament: MultiStageTournament,
   stage: Stage
 ): Team[] {
-  const advancementCount = stage.advancementCount || 0;
-  if (advancementCount === 0) return [];
+  const advancementCount = stage.advancementCount; // undefined = advance all non-eliminated
 
   const advancingTeamIds: { teamId: string; groupIndex: number; rank: number; wins: number }[] = [];
 
@@ -883,16 +1016,22 @@ function getAdvancingTeams(
     // If winsToAdvance is set, prioritize teams that hit it
     let advancing: typeof groupTeamInfo;
 
-    if (stage.winsToAdvance) {
+    if (advancementCount && stage.winsToAdvance) {
       const qualified = groupTeamInfo.filter((t) => t.wins >= stage.winsToAdvance!);
       const remaining = groupTeamInfo.filter((t) => t.wins < stage.winsToAdvance!);
 
       // Fill up to advancementCount: qualified first, then remaining by rank (tiebreaker)
       const slotsToFill = advancementCount - qualified.length;
       advancing = [...qualified, ...remaining.slice(0, Math.max(0, slotsToFill))];
-    } else {
-      // No winsToAdvance — just take top N
+    } else if (advancementCount) {
+      // Fixed count, no winsToAdvance — just take top N
       advancing = groupTeamInfo.slice(0, advancementCount);
+    } else if (stage.winsToAdvance) {
+      // No fixed count — advance everyone who hit winsToAdvance
+      advancing = groupTeamInfo.filter((t) => t.wins >= stage.winsToAdvance! || t.status === 'advanced');
+    } else {
+      // No criteria at all — advance all non-eliminated
+      advancing = groupTeamInfo;
     }
 
     advancing.forEach((t, rank) => {

@@ -190,7 +190,9 @@ export function MultiStageCreateForm({ stages, onChange }: MultiStageCreateFormP
                     value={stage.advancementCount ?? ''}
                     onChange={(e) => updateStage(index, { advancementCount: e.target.value === '' ? undefined : parseInt(e.target.value) })}
                     className="w-full bg-gray-900 border border-gray-600 rounded px-3 py-2 text-sm text-white focus:border-blue-500 focus:outline-none"
+                    placeholder="optional"
                   />
+                  <p className="text-xs text-gray-500 mt-0.5">Leave empty = advance all who qualify. Set to e.g. 8 to cap and fill by tiebreaker.</p>
                 </div>
               )}
 

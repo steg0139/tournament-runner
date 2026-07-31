@@ -129,9 +129,9 @@ router.post('/tournaments/multi-stage', async (req: Request, res: Response) => {
         });
       }
 
-      if (!isFinal && !stage.advancementCount) {
+      if (!isFinal && !stage.advancementCount && !stage.eliminationThreshold) {
         return res.status(400).json({
-          error: `Stage ${i + 1}: Non-final stages require advancement count (teams advancing per group)`,
+          error: `Stage ${i + 1}: Non-final stages need either advancement count or elimination threshold`,
         });
       }
     }
@@ -149,22 +149,25 @@ router.post('/tournaments/multi-stage', async (req: Request, res: Response) => {
     const tournamentId = uuidv4();
 
     // Build stages — all start pending, initialized on "start"
-    const stages: Stage[] = body.stages.map((stageDef, index) => ({
-      id: uuidv4(),
-      position: index + 1,
-      name: stageDef.name,
-      format: stageDef.format,
-      status: 'pending' as const,
-      groupCount: stageDef.groupCount || 1,
-      eliminationThreshold: stageDef.eliminationThreshold,
-      advancementCount: stageDef.advancementCount,
-      winsToAdvance: stageDef.winsToAdvance,
-      courts: stageDef.courts,
-      groups: [],
-      matches: [],
-      teamStageInfo: [],
-      advancedTeamIds: [],
-    }));
+    const stages: Stage[] = body.stages.map((stageDef, index) => {
+      console.log(`[Create] Stage ${index + 1} config:`, JSON.stringify(stageDef));
+      return {
+        id: uuidv4(),
+        position: index + 1,
+        name: stageDef.name,
+        format: stageDef.format,
+        status: 'pending' as const,
+        groupCount: stageDef.groupCount || 1,
+        eliminationThreshold: stageDef.eliminationThreshold,
+        advancementCount: stageDef.advancementCount,
+        winsToAdvance: stageDef.winsToAdvance,
+        courts: stageDef.courts,
+        groups: [],
+        matches: [],
+        teamStageInfo: [],
+        advancedTeamIds: [],
+      };
+    });
 
     const tournament: MultiStageTournament = {
       id: tournamentId,

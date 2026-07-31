@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import type { Stage, Group, TeamStageInfo, Team, Match } from '../api/types';
 
 interface GroupStandingsProps {
@@ -48,6 +48,7 @@ export function GroupStandings({ stage, teams, onGenerateNextRound, onMatchClick
     return groupInfo
       .sort((a, b) => {
         if (b.wins !== a.wins) return b.wins - a.wins;
+        if (a.losses !== b.losses) return a.losses - b.losses;
         const sosA = sosMap.get(a.teamId) || 0;
         const sosB = sosMap.get(b.teamId) || 0;
         if (sosB !== sosA) return sosB - sosA;
@@ -117,12 +118,10 @@ export function GroupStandings({ stage, teams, onGenerateNextRound, onMatchClick
               const roundComplete = isRoundComplete(group);
               const canGenerateNext = roundComplete && group.status !== 'completed' && stage.status !== 'completed';
 
-              // Get pending and current round matches
+              // Show all matches for this group
               const visibleMatches = stage.matches.filter((m) => {
                 if (m.groupId !== group.id) return false;
-                if (m.status === 'pending') return true;
-                if (m.round === group.currentRound) return true;
-                return false;
+                return true;
               });
 
               return (
@@ -146,6 +145,7 @@ export function GroupStandings({ stage, teams, onGenerateNextRound, onMatchClick
                   </div>
                   <MatchList
                     matches={visibleMatches}
+                    allMatches={stage.matches.filter((m) => m.groupId === group.id)}
                     currentRound={group.currentRound}
                     getTeamName={getTeamName}
                     onMatchClick={onMatchClick}
@@ -226,15 +226,27 @@ export function GroupStandings({ stage, teams, onGenerateNextRound, onMatchClick
 
 function MatchList({
   matches,
+  allMatches,
   currentRound,
   getTeamName,
   onMatchClick,
 }: {
   matches: Match[];
+  allMatches: Match[];
   currentRound: number;
   getTeamName: (id: string) => string;
   onMatchClick?: (match: Match) => void;
 }) {
+  const [userSelectedRound, setUserSelectedRound] = useState<number | null>(null);
+
+  // Auto-follow current round when it advances
+  useEffect(() => {
+    setUserSelectedRound(null); // Reset to follow currentRound
+  }, [currentRound]);
+
+  // Auto-follow current round unless user explicitly selected a different one
+  const activeRound = userSelectedRound ?? currentRound;
+
   if (matches.length === 0) {
     return <p className="px-3 py-4 text-gray-500 text-sm text-center">No matches yet</p>;
   }
@@ -246,53 +258,99 @@ function MatchList({
     rounds.get(match.round)!.push(match);
   }
 
-  const sortedRounds = Array.from(rounds.entries()).sort(([a], [b]) => a - b);
+  const sortedRoundNumbers = Array.from(rounds.keys()).sort((a, b) => a - b);
+  const activeMatches = rounds.get(activeRound) || [];
+
+  // Calculate records as of the START of the active round
+  // (only count matches from rounds before the active round)
+  const getRecordBefore = (teamId: string): string => {
+    let wins = 0;
+    let losses = 0;
+    for (const m of allMatches) {
+      if (m.round >= activeRound) continue;
+      if (m.status !== 'completed') continue;
+      if (m.winnerId === teamId) wins++;
+      else if (m.loserId === teamId) losses++;
+    }
+    return `${wins}-${losses}`;
+  };
 
   return (
-    <div className="divide-y divide-gray-700/50">
-      {sortedRounds.map(([round, roundMatches]) => (
-        <div key={round} className="px-3 py-2.5 sm:px-4">
-          <p className="text-xs text-gray-500 mb-2 font-medium">
-            Round {round} {round > currentRound ? '(Up Next)' : ''}
-          </p>
-          <div className="space-y-2">
-            {roundMatches.map((match) => {
-              const isNewScore = match.status !== 'completed' && match.team1Id && match.team2Id;
-              const isEditable = match.status === 'completed' && match.team2Id; // not a bye
-              const isClickable = isNewScore || isEditable;
-              const isBye = !match.team2Id;
+    <div>
+      {/* Round pills */}
+      <div className="flex gap-1.5 px-3 py-2.5 sm:px-4 overflow-x-auto border-b border-gray-700/50">
+        {sortedRoundNumbers.map((round) => {
+          const isActive = round === activeRound;
+          const isCurrent = round === currentRound;
+          const roundMatches = rounds.get(round) || [];
+          const hasPending = roundMatches.some((m) => m.status === 'pending');
 
-              return (
-                <div
-                  key={match.id}
-                  onClick={isClickable && onMatchClick ? () => onMatchClick(match) : undefined}
-                  className={`flex items-center justify-between px-3 py-2.5 rounded-lg text-sm ${
-                    isNewScore
-                      ? 'bg-blue-900/20 border border-blue-500/50 cursor-pointer hover:border-blue-400 active:bg-blue-900/40'
-                      : isEditable
-                      ? 'bg-gray-700/30 cursor-pointer hover:bg-gray-700/50 active:bg-gray-600/50'
-                      : 'bg-gray-700/30'
-                  }`}
-                >
-                  <span className={`flex-1 truncate ${match.winnerId === match.team1Id ? 'text-green-400 font-medium' : ''}`}>
+          return (
+            <button
+              key={round}
+              onClick={() => setUserSelectedRound(round)}
+              className={`flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
+                isActive
+                  ? 'bg-blue-600 text-white'
+                  : hasPending
+                  ? 'bg-yellow-900/30 text-yellow-400 border border-yellow-700'
+                  : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+              }`}
+            >
+              R{round}{isCurrent && !isActive ? ' •' : ''}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Matches for selected round */}
+      <div className="px-3 py-2.5 sm:px-4">
+        <div className="space-y-2">
+          {activeMatches.map((match) => {
+            const isNewScore = match.status !== 'completed' && match.team1Id && match.team2Id;
+            const isEditable = match.status === 'completed' && match.team2Id;
+            const isClickable = isNewScore || isEditable;
+            const isBye = !match.team2Id;
+
+            const t1Record = match.team1Id ? getRecordBefore(match.team1Id) : '';
+            const t2Record = match.team2Id ? getRecordBefore(match.team2Id) : '';
+
+            return (
+              <div
+                key={match.id}
+                onClick={isClickable && onMatchClick ? () => onMatchClick(match) : undefined}
+                className={`flex items-center justify-between px-3 py-2.5 rounded-lg text-sm ${
+                  isNewScore
+                    ? 'bg-blue-900/20 border border-blue-500/50 cursor-pointer hover:border-blue-400 active:bg-blue-900/40'
+                    : isEditable
+                    ? 'bg-gray-700/30 cursor-pointer hover:bg-gray-700/50 active:bg-gray-600/50'
+                    : 'bg-gray-700/30'
+                }`}
+              >
+                <div className="flex-1 truncate">
+                  <span className={match.winnerId === match.team1Id ? 'text-green-400 font-medium' : ''}>
                     {match.team1Id ? getTeamName(match.team1Id) : '?'}
                   </span>
-                  <span className="text-gray-500 mx-2 text-xs flex-shrink-0">
-                    {match.status === 'completed'
-                      ? isBye
-                        ? 'BYE'
-                        : `${match.team1Score} - ${match.team2Score}`
-                      : 'vs'}
-                  </span>
-                  <span className={`flex-1 truncate text-right ${match.winnerId === match.team2Id ? 'text-green-400 font-medium' : ''}`}>
+                  {t1Record && <span className="text-gray-500 text-xs ml-1">({t1Record})</span>}
+                </div>
+                <span className="text-gray-500 mx-2 text-xs flex-shrink-0">
+                  {match.status === 'completed'
+                    ? isBye
+                      ? 'BYE'
+                      : `${match.team1Score} - ${match.team2Score}`
+                    : 'vs'}
+                </span>
+                <div className="flex-1 truncate text-right">
+                  {t2Record && <span className="text-gray-500 text-xs mr-1">({t2Record})</span>}
+                  <span className={match.winnerId === match.team2Id ? 'text-green-400 font-medium' : ''}>
                     {match.team2Id ? getTeamName(match.team2Id) : isBye ? 'BYE' : '?'}
                   </span>
                 </div>
-              );
-            })}
-          </div>
+              </div>
+            );
+          })}
         </div>
-      ))}
+      </div>
     </div>
   );
 }

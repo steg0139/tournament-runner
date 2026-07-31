@@ -54,7 +54,7 @@ export function CreateTournamentPage() {
             format: s.format,
             groupCount: Math.max(1, s.groupCount || 1),
             eliminationThreshold: s.format === 'swiss' ? Math.max(1, s.eliminationThreshold || 2) : undefined,
-            advancementCount: !isFinal ? Math.max(1, s.advancementCount || 2) : undefined,
+            advancementCount: !isFinal && s.advancementCount && s.advancementCount > 0 ? s.advancementCount : undefined,
             winsToAdvance: s.winsToAdvance && s.winsToAdvance > 0 ? s.winsToAdvance : undefined,
             courts: s.courts && s.courts > 0 ? s.courts : undefined,
           };
