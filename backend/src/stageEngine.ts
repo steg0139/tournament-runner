@@ -378,16 +378,18 @@ export function revertAndReScore(
     }
   }
 
-  // After editing, cancel pending progressive matches in this group and regenerate
-  // But do NOT advance rounds — just refresh the available pairings
+  // After editing, cancel pending progressive matches in FUTURE rounds and regenerate them
+  // Current round matchups are unaffected since they're already set
   if (targetMatch.groupId) {
-    // Only cancel pending matches that are in a FUTURE round (progressive ones)
     const group = targetStage.groups.find((g) => g.id === targetMatch!.groupId);
     if (group) {
       const currentRound = group.currentRound;
+      // Remove only future-round pending matches (progressive ones)
       targetStage.matches = targetStage.matches.filter(
         (m) => !(m.groupId === targetMatch!.groupId && m.status === 'pending' && m.round > currentRound)
       );
+      // Regenerate progressive pairings based on updated standings
+      generateProgressivePairings(tournament, targetStage, targetMatch!.groupId);
     }
   }
 
