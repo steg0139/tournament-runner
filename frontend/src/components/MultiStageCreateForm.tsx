@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import type { TournamentFormat } from '../api/types';
 
 export interface StageConfig {

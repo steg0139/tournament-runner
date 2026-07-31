@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { api } from '../api/client';
-import type { AnyTournament, MultiStageTournament, Tournament, Match, Stage } from '../api/types';
+import type { AnyTournament, MultiStageTournament, Tournament, Match } from '../api/types';
 import { isMultiStage } from '../api/types';
 import { BracketView } from '../components/BracketView';
 import { RoundRobinView } from '../components/RoundRobinView';
@@ -145,7 +145,6 @@ export function TournamentPage() {
         <SetupView
           tournament={tournament}
           onTournamentUpdate={setTournament}
-          getTeamName={getTeamName}
         />
       )}
 
@@ -319,11 +318,9 @@ function SingleFormatView({
 function SetupView({
   tournament,
   onTournamentUpdate,
-  getTeamName,
 }: {
   tournament: AnyTournament;
   onTournamentUpdate: (t: AnyTournament) => void;
-  getTeamName: (id: string | null) => string;
 }) {
   const [teamInput, setTeamInput] = useState('');
   const [error, setError] = useState<string | null>(null);
