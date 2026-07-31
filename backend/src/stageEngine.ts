@@ -347,7 +347,17 @@ export function processScoreUpdate(
   const winnerInfo = targetStage.teamStageInfo.find((t) => t.teamId === targetMatch!.winnerId);
   const loserInfo = targetStage.teamStageInfo.find((t) => t.teamId === targetMatch!.loserId);
 
-  if (winnerInfo) winnerInfo.wins++;
+  if (winnerInfo) {
+    winnerInfo.wins++;
+    // Check if team has reached winsToAdvance threshold
+    if (
+      targetStage.winsToAdvance &&
+      winnerInfo.wins >= targetStage.winsToAdvance &&
+      winnerInfo.status === 'active'
+    ) {
+      winnerInfo.status = 'advanced';
+    }
+  }
   if (loserInfo) {
     loserInfo.losses++;
     // Check elimination threshold
