@@ -2,12 +2,14 @@ import express from 'express';
 import cors from 'cors';
 import serverless from 'serverless-http';
 import routes from './routes';
+import multiStageRoutes from './multiStageRoutes';
 
 const app = express();
 
 app.use(cors());
 app.use(express.json());
 app.use('/api', routes);
+app.use('/api', multiStageRoutes);
 
 // Health check
 app.get('/health', (_req, res) => {

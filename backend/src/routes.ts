@@ -6,8 +6,10 @@ import {
   updateTournament,
   deleteTournament,
   listTournaments,
+  isMultiStage,
 } from './db';
 import { generateMatches, generateSwissRound } from './brackets';
+import { processScoreUpdate } from './stageEngine';
 import {
   Tournament,
   Team,
@@ -47,18 +49,14 @@ router.post('/tournaments', async (req: Request, res: Response) => {
   try {
     const body: CreateTournamentRequest = req.body;
 
-    if (!body.name || !body.sport || !body.format || !body.teams?.length) {
+    if (!body.name || !body.sport || !body.format) {
       return res.status(400).json({
-        error: 'Missing required fields: name, sport, format, teams',
+        error: 'Missing required fields: name, sport, format',
       });
     }
 
-    if (body.teams.length < 2) {
-      return res.status(400).json({ error: 'Need at least 2 teams' });
-    }
-
-    // Create team objects with IDs
-    const teams: Team[] = body.teams.map((t, index) => ({
+    // Allow creating with no teams (setup state) — always start in setup
+    const teams: Team[] = (body.teams || []).map((t, index) => ({
       id: uuidv4(),
       name: t.name,
       seed: t.seed || index + 1,
@@ -66,17 +64,14 @@ router.post('/tournaments', async (req: Request, res: Response) => {
 
     const tournamentId = uuidv4();
 
-    // Generate matches based on format
-    const matches = generateMatches(tournamentId, teams, body.format);
-
     const tournament: Tournament = {
       id: tournamentId,
       name: body.name,
       sport: body.sport,
       format: body.format,
-      status: 'in_progress',
+      status: 'setup',
       teams,
-      matches,
+      matches: [],
       currentRound: 1,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
@@ -111,6 +106,19 @@ router.put(
         return res.status(404).json({ error: 'Tournament not found' });
       }
 
+      // Handle multi-stage tournaments
+      if (isMultiStage(tournament)) {
+        try {
+          const updated = processScoreUpdate(tournament, matchId, team1Score, team2Score);
+          updated.updatedAt = new Date().toISOString();
+          await updateTournament(updated);
+          return res.json(updated);
+        } catch (e: any) {
+          return res.status(400).json({ error: e.message });
+        }
+      }
+
+      // Single-format tournament (existing logic)
       const matchIndex = tournament.matches.findIndex((m) => m.id === matchId);
       if (matchIndex === -1) {
         return res.status(404).json({ error: 'Match not found' });
@@ -185,6 +193,10 @@ router.post(
         return res.status(404).json({ error: 'Tournament not found' });
       }
 
+      if (isMultiStage(tournament)) {
+        return res.status(400).json({ error: 'Use the multi-stage endpoint for multi-stage tournaments' });
+      }
+
       if (tournament.format !== 'swiss') {
         return res.status(400).json({ error: 'Tournament is not Swiss format' });
       }
@@ -228,6 +240,108 @@ router.post(
     }
   }
 );
+
+// Add teams to a tournament in setup state
+router.post('/tournaments/:id/teams', async (req: Request, res: Response) => {
+  try {
+    const tournament = await getTournament(req.params.id);
+    if (!tournament) {
+      return res.status(404).json({ error: 'Tournament not found' });
+    }
+
+    if (isMultiStage(tournament)) {
+      return res.status(400).json({ error: 'Use multi-stage endpoints for multi-stage tournaments' });
+    }
+
+    if (tournament.status !== 'setup') {
+      return res.status(400).json({ error: 'Can only add teams while tournament is in setup state' });
+    }
+
+    const { teams: newTeams } = req.body;
+    if (!newTeams || !Array.isArray(newTeams) || newTeams.length === 0) {
+      return res.status(400).json({ error: 'Provide an array of teams' });
+    }
+
+    const startingSeed = tournament.teams.length + 1;
+    const teamsToAdd: Team[] = newTeams.map((t: { name: string; seed?: number }, i: number) => ({
+      id: uuidv4(),
+      name: t.name,
+      seed: t.seed || startingSeed + i,
+    }));
+
+    tournament.teams.push(...teamsToAdd);
+    tournament.updatedAt = new Date().toISOString();
+    await updateTournament(tournament);
+
+    res.json(tournament);
+  } catch (error) {
+    console.error('Error adding teams:', error);
+    res.status(500).json({ error: 'Failed to add teams' });
+  }
+});
+
+// Remove a team from a tournament in setup state
+router.delete('/tournaments/:id/teams/:teamId', async (req: Request, res: Response) => {
+  try {
+    const tournament = await getTournament(req.params.id);
+    if (!tournament) {
+      return res.status(404).json({ error: 'Tournament not found' });
+    }
+
+    if (isMultiStage(tournament)) {
+      return res.status(400).json({ error: 'Use multi-stage endpoints for multi-stage tournaments' });
+    }
+
+    if (tournament.status !== 'setup') {
+      return res.status(400).json({ error: 'Can only remove teams while tournament is in setup state' });
+    }
+
+    tournament.teams = tournament.teams.filter((t) => t.id !== req.params.teamId);
+    // Re-seed
+    tournament.teams = tournament.teams.map((t, i) => ({ ...t, seed: i + 1 }));
+    tournament.updatedAt = new Date().toISOString();
+    await updateTournament(tournament);
+
+    res.json(tournament);
+  } catch (error) {
+    console.error('Error removing team:', error);
+    res.status(500).json({ error: 'Failed to remove team' });
+  }
+});
+
+// Start a tournament (move from setup to in_progress, generate matches)
+router.post('/tournaments/:id/start', async (req: Request, res: Response) => {
+  try {
+    const tournament = await getTournament(req.params.id);
+    if (!tournament) {
+      return res.status(404).json({ error: 'Tournament not found' });
+    }
+
+    if (isMultiStage(tournament)) {
+      return res.status(400).json({ error: 'Use multi-stage endpoints for multi-stage tournaments' });
+    }
+
+    if (tournament.status !== 'setup') {
+      return res.status(400).json({ error: 'Tournament is already started' });
+    }
+
+    if (tournament.teams.length < 2) {
+      return res.status(400).json({ error: 'Need at least 2 teams to start' });
+    }
+
+    // Generate matches
+    tournament.matches = generateMatches(tournament.id, tournament.teams, tournament.format);
+    tournament.status = 'in_progress';
+    tournament.currentRound = 1;
+    tournament.updatedAt = new Date().toISOString();
+
+    await updateTournament(tournament);
+    res.json(tournament);
+  } catch (error) {
+    console.error('Error starting tournament:', error);
+    res.status(500).json({ error: 'Failed to start tournament' });
+  }
+});
 
 // Delete a tournament
 router.delete('/tournaments/:id', async (req: Request, res: Response) => {

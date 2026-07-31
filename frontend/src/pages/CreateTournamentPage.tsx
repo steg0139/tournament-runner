@@ -2,32 +2,28 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../api/client';
 import type { Sport, TournamentFormat } from '../api/types';
+import { MultiStageCreateForm } from '../components/MultiStageCreateForm';
+import type { StageConfig } from '../components/MultiStageCreateForm';
+
+type TournamentStructure = 'single' | 'multi_stage';
 
 export function CreateTournamentPage() {
   const navigate = useNavigate();
   const [name, setName] = useState('');
   const [sport, setSport] = useState<Sport>('basketball');
+  const [structure, setStructure] = useState<TournamentStructure>('single');
   const [format, setFormat] = useState<TournamentFormat>('single_elimination');
   const [teamInput, setTeamInput] = useState('');
   const [teams, setTeams] = useState<{ name: string; seed?: number }[]>([]);
+  const [stages, setStages] = useState<StageConfig[]>([
+    { name: 'Group Stage', format: 'swiss', groupCount: 2, eliminationThreshold: 2, advancementCount: 2 },
+    { name: 'Playoffs', format: 'single_elimination', groupCount: 1 },
+  ]);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
-  const addTeam = () => {
-    const trimmed = teamInput.trim();
-    if (!trimmed) return;
-    if (teams.some((t) => t.name.toLowerCase() === trimmed.toLowerCase())) {
-      setError('Team already added');
-      return;
-    }
-    setTeams([...teams, { name: trimmed, seed: teams.length + 1 }]);
-    setTeamInput('');
-    setError(null);
-  };
-
   const removeTeam = (index: number) => {
     const updated = teams.filter((_, i) => i !== index);
-    // Re-seed
     setTeams(updated.map((t, i) => ({ ...t, seed: i + 1 })));
   };
 
@@ -44,22 +40,28 @@ export function CreateTournamentPage() {
       setError('Tournament name is required');
       return;
     }
-    if (teams.length < 2) {
-      setError('Need at least 2 teams');
-      return;
-    }
 
     setSubmitting(true);
     setError(null);
 
     try {
-      const tournament = await api.createTournament({
-        name: name.trim(),
-        sport,
-        format,
-        teams,
-      });
-      navigate(`/tournament/${tournament.id}`);
+      if (structure === 'multi_stage') {
+        const tournament = await api.createMultiStageTournament({
+          name: name.trim(),
+          sport,
+          teams: teams.length > 0 ? teams : [],
+          stages,
+        });
+        navigate(`/tournament/${tournament.id}`);
+      } else {
+        const tournament = await api.createTournament({
+          name: name.trim(),
+          sport,
+          format,
+          teams: teams.length > 0 ? teams : [],
+        });
+        navigate(`/tournament/${tournament.id}`);
+      }
     } catch (e: any) {
       setError(e.message);
       setSubmitting(false);
@@ -67,21 +69,22 @@ export function CreateTournamentPage() {
   };
 
   const handleBulkAdd = () => {
-    const lines = teamInput
-      .split('\n')
+    const names = teamInput
+      .split(/[,\n]/)
       .map((l) => l.trim())
       .filter((l) => l.length > 0);
-    
-    if (lines.length > 1) {
-      const newTeams = lines
-        .filter((l) => !teams.some((t) => t.name.toLowerCase() === l.toLowerCase()))
-        .map((name, i) => ({ name, seed: teams.length + i + 1 }));
+
+    if (names.length === 0) return;
+
+    const newTeams = names
+      .filter((l) => !teams.some((t) => t.name.toLowerCase() === l.toLowerCase()))
+      .map((name, i) => ({ name, seed: teams.length + i + 1 }));
+
+    if (newTeams.length > 0) {
       setTeams([...teams, ...newTeams]);
-      setTeamInput('');
-      setError(null);
-    } else {
-      addTeam();
     }
+    setTeamInput('');
+    setError(null);
   };
 
   return (
@@ -119,62 +122,94 @@ export function CreateTournamentPage() {
           </select>
         </div>
 
-        {/* Format */}
+        {/* Tournament Structure Toggle */}
         <div>
           <label className="block text-sm font-medium text-gray-300 mb-2">
-            Tournament Format
+            Tournament Structure
           </label>
           <div className="grid grid-cols-2 gap-3">
-            {[
-              { value: 'single_elimination', label: 'Single Elimination', desc: 'Lose once, you\'re out' },
-              { value: 'double_elimination', label: 'Double Elimination', desc: 'Lose twice to be eliminated' },
-              { value: 'round_robin', label: 'Round Robin', desc: 'Everyone plays everyone' },
-              { value: 'swiss', label: 'Swiss', desc: 'Paired by record each round' },
-            ].map((f) => (
-              <button
-                key={f.value}
-                onClick={() => setFormat(f.value as TournamentFormat)}
-                className={`p-4 rounded-lg border text-left transition-colors ${
-                  format === f.value
-                    ? 'border-blue-500 bg-blue-900/30'
-                    : 'border-gray-600 bg-gray-800 hover:border-gray-500'
-                }`}
-              >
-                <div className="font-medium">{f.label}</div>
-                <div className="text-sm text-gray-400 mt-1">{f.desc}</div>
-              </button>
-            ))}
+            <button
+              onClick={() => setStructure('single')}
+              className={`p-4 rounded-lg border text-left transition-colors ${
+                structure === 'single'
+                  ? 'border-blue-500 bg-blue-900/30'
+                  : 'border-gray-600 bg-gray-800 hover:border-gray-500'
+              }`}
+            >
+              <div className="font-medium">Single Format</div>
+              <div className="text-sm text-gray-400 mt-1">One format for the whole tournament</div>
+            </button>
+            <button
+              onClick={() => setStructure('multi_stage')}
+              className={`p-4 rounded-lg border text-left transition-colors ${
+                structure === 'multi_stage'
+                  ? 'border-blue-500 bg-blue-900/30'
+                  : 'border-gray-600 bg-gray-800 hover:border-gray-500'
+              }`}
+            >
+              <div className="font-medium">Multi-Stage</div>
+              <div className="text-sm text-gray-400 mt-1">Groups → Playoffs (or custom stages)</div>
+            </button>
           </div>
         </div>
+
+        {/* Single Format Picker */}
+        {structure === 'single' && (
+          <div>
+            <label className="block text-sm font-medium text-gray-300 mb-2">
+              Tournament Format
+            </label>
+            <div className="grid grid-cols-2 gap-3">
+              {[
+                { value: 'single_elimination', label: 'Single Elimination', desc: 'Lose once, you\'re out' },
+                { value: 'double_elimination', label: 'Double Elimination', desc: 'Lose twice to be eliminated' },
+                { value: 'round_robin', label: 'Round Robin', desc: 'Everyone plays everyone' },
+                { value: 'swiss', label: 'Swiss', desc: 'Paired by record each round' },
+              ].map((f) => (
+                <button
+                  key={f.value}
+                  onClick={() => setFormat(f.value as TournamentFormat)}
+                  className={`p-4 rounded-lg border text-left transition-colors ${
+                    format === f.value
+                      ? 'border-blue-500 bg-blue-900/30'
+                      : 'border-gray-600 bg-gray-800 hover:border-gray-500'
+                  }`}
+                >
+                  <div className="font-medium">{f.label}</div>
+                  <div className="text-sm text-gray-400 mt-1">{f.desc}</div>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Multi-Stage Configuration */}
+        {structure === 'multi_stage' && (
+          <MultiStageCreateForm stages={stages} onChange={setStages} />
+        )}
 
         {/* Teams */}
         <div>
           <label className="block text-sm font-medium text-gray-300 mb-2">
             Teams / Players ({teams.length} added)
           </label>
-          <div className="flex gap-2">
+          <div className="flex gap-2 items-end">
             <textarea
               value={teamInput}
               onChange={(e) => setTeamInput(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && !e.shiftKey) {
-                  e.preventDefault();
-                  handleBulkAdd();
-                }
-              }}
-              placeholder="Enter team name (or paste multiple names, one per line)"
-              rows={1}
-              className="flex-1 bg-gray-800 border border-gray-600 rounded-lg px-4 py-3 text-white placeholder-gray-500 focus:border-blue-500 focus:outline-none resize-none"
+              placeholder="Enter team names separated by commas or new lines"
+              rows={3}
+              className="flex-1 bg-gray-800 border border-gray-600 rounded-lg px-4 py-3 text-white placeholder-gray-500 focus:border-blue-500 focus:outline-none resize-y"
             />
             <button
               onClick={handleBulkAdd}
-              className="bg-green-600 hover:bg-green-700 text-white px-4 py-3 rounded-lg font-medium transition-colors"
+              className="bg-green-600 hover:bg-green-700 text-white px-4 py-3 rounded-lg font-medium transition-colors h-fit"
             >
               Add
             </button>
           </div>
           <p className="text-xs text-gray-500 mt-1">
-            Tip: Paste multiple names separated by new lines to bulk add. Order determines seeding (top = #1 seed).
+            Separate names with commas or new lines. Order determines seeding (first added = #1 seed).
           </p>
 
           {teams.length > 0 && (

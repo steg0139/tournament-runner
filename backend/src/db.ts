@@ -7,17 +7,23 @@ import {
   DeleteCommand,
   ScanCommand,
 } from '@aws-sdk/lib-dynamodb';
-import { Tournament } from './types';
+import { Tournament, MultiStageTournament, AnyTournament } from './types';
 
-const client = new DynamoDBClient({
-  region: process.env.AWS_REGION || 'us-east-1',
+const client = new DynamoDBClient({});
+
+const docClient = DynamoDBDocumentClient.from(client, {
+  marshallOptions: {
+    removeUndefinedValues: true,
+  },
 });
-
-const docClient = DynamoDBDocumentClient.from(client);
 
 const TABLE_NAME = process.env.DYNAMODB_TABLE || 'TournamentRunner';
 
-export async function createTournament(tournament: Tournament): Promise<void> {
+export function isMultiStage(t: AnyTournament): t is MultiStageTournament {
+  return t.type === 'multi_stage';
+}
+
+export async function createTournament(tournament: AnyTournament): Promise<void> {
   await docClient.send(
     new PutCommand({
       TableName: TABLE_NAME,
@@ -30,7 +36,7 @@ export async function createTournament(tournament: Tournament): Promise<void> {
   );
 }
 
-export async function getTournament(id: string): Promise<Tournament | null> {
+export async function getTournament(id: string): Promise<AnyTournament | null> {
   const result = await docClient.send(
     new GetCommand({
       TableName: TABLE_NAME,
@@ -44,10 +50,10 @@ export async function getTournament(id: string): Promise<Tournament | null> {
   if (!result.Item) return null;
 
   const { PK, SK, ...tournament } = result.Item;
-  return tournament as Tournament;
+  return tournament as AnyTournament;
 }
 
-export async function updateTournament(tournament: Tournament): Promise<void> {
+export async function updateTournament(tournament: AnyTournament): Promise<void> {
   await docClient.send(
     new PutCommand({
       TableName: TABLE_NAME,
@@ -72,7 +78,7 @@ export async function deleteTournament(id: string): Promise<void> {
   );
 }
 
-export async function listTournaments(): Promise<Tournament[]> {
+export async function listTournaments(): Promise<AnyTournament[]> {
   const result = await docClient.send(
     new ScanCommand({
       TableName: TABLE_NAME,
@@ -85,6 +91,6 @@ export async function listTournaments(): Promise<Tournament[]> {
 
   return (result.Items || []).map((item) => {
     const { PK, SK, ...tournament } = item;
-    return tournament as Tournament;
+    return tournament as AnyTournament;
   });
 }
