@@ -54,7 +54,29 @@ function calculatePointDiff(
 }
 
 /**
- * Swiss tiebreaker comparison: wins desc, losses asc, SOS desc, point differential desc, seed asc.
+ * Calculate head-to-head record between two teams.
+ * Returns positive if team A beat team B, negative if B beat A, 0 if they haven't played.
+ */
+function headToHead(
+  teamAId: string,
+  teamBId: string,
+  matches: Match[]
+): number {
+  let aWins = 0;
+  let bWins = 0;
+  for (const m of matches) {
+    if (m.status !== 'completed') continue;
+    if ((m.team1Id === teamAId && m.team2Id === teamBId) ||
+        (m.team1Id === teamBId && m.team2Id === teamAId)) {
+      if (m.winnerId === teamAId) aWins++;
+      else if (m.winnerId === teamBId) bWins++;
+    }
+  }
+  return bWins - aWins; // negative = A wins h2h, positive = B wins h2h
+}
+
+/**
+ * Swiss tiebreaker: wins desc, losses asc, head-to-head, SOS desc, point differential desc, seed asc.
  */
 function swissTiebreaker(
   a: TeamStageInfo,
@@ -67,11 +89,14 @@ function swissTiebreaker(
   if (b.wins !== a.wins) return b.wins - a.wins;
   // Secondary: fewer losses first
   if (a.losses !== b.losses) return a.losses - b.losses;
-  // Tertiary: strength of schedule desc
+  // Tertiary: head-to-head
+  const h2h = headToHead(a.teamId, b.teamId, groupMatches);
+  if (h2h !== 0) return h2h;
+  // Quaternary: strength of schedule desc
   const sosA = calculateSOS(a.teamId, groupMatches, allGroupInfo);
   const sosB = calculateSOS(b.teamId, groupMatches, allGroupInfo);
   if (sosB !== sosA) return sosB - sosA;
-  // Quaternary: point differential desc
+  // Quinary: point differential desc
   const diffA = calculatePointDiff(a.teamId, groupMatches);
   const diffB = calculatePointDiff(b.teamId, groupMatches);
   if (diffB !== diffA) return diffB - diffA;

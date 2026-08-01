@@ -49,12 +49,26 @@ export function GroupStandings({ stage, teams, onGenerateNextRound, onMatchClick
       .sort((a, b) => {
         if (b.wins !== a.wins) return b.wins - a.wins;
         if (a.losses !== b.losses) return a.losses - b.losses;
+        // Head-to-head
+        let aWinsH2H = 0;
+        let bWinsH2H = 0;
+        for (const m of groupMatches) {
+          if ((m.team1Id === a.teamId && m.team2Id === b.teamId) ||
+              (m.team1Id === b.teamId && m.team2Id === a.teamId)) {
+            if (m.winnerId === a.teamId) aWinsH2H++;
+            else if (m.winnerId === b.teamId) bWinsH2H++;
+          }
+        }
+        if (aWinsH2H !== bWinsH2H) return bWinsH2H - aWinsH2H;
+        // SOS
         const sosA = sosMap.get(a.teamId) || 0;
         const sosB = sosMap.get(b.teamId) || 0;
         if (sosB !== sosA) return sosB - sosA;
+        // Point diff
         const diffA = diffMap.get(a.teamId) || 0;
         const diffB = diffMap.get(b.teamId) || 0;
         if (diffB !== diffA) return diffB - diffA;
+        // Seed
         const teamA = teams.find((t) => t.id === a.teamId);
         const teamB = teams.find((t) => t.id === b.teamId);
         return (teamA?.seed || 999) - (teamB?.seed || 999);
@@ -182,7 +196,7 @@ export function GroupStandings({ stage, teams, onGenerateNextRound, onMatchClick
                           <th className="px-2 py-2 text-left sm:px-4">Team</th>
                           <th className="px-2 py-2 text-center">W</th>
                           <th className="px-2 py-2 text-center">L</th>
-                          <th className="px-2 py-2 text-center hidden sm:table-cell">SOS</th>
+                          <th className="px-2 py-2 text-center">SOS</th>
                           <th className="px-2 py-2 text-center">+/-</th>
                           <th className="px-2 py-2 text-center"></th>
                         </tr>
@@ -203,7 +217,7 @@ export function GroupStandings({ stage, teams, onGenerateNextRound, onMatchClick
                             </td>
                             <td className="px-2 py-2 text-center text-green-400">{info.wins}</td>
                             <td className="px-2 py-2 text-center text-red-400">{info.losses}</td>
-                            <td className="px-2 py-2 text-center text-gray-300 hidden sm:table-cell">{info.sos}</td>
+                            <td className="px-2 py-2 text-center text-gray-300">{info.sos}</td>
                             <td className="px-2 py-2 text-center">
                               <span className={info.pointDiff > 0 ? 'text-green-400' : info.pointDiff < 0 ? 'text-red-400' : 'text-gray-400'}>
                                 {info.pointDiff > 0 ? '+' : ''}{info.pointDiff}
