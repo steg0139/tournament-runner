@@ -254,6 +254,101 @@ router.delete('/tournaments/:id/multi-stage/teams/:teamId', async (req: Request,
   }
 });
 
+// Edit a team's standings directly (manual override)
+router.put('/tournaments/:id/stages/:stageId/teams/:teamId/standings', async (req: Request, res: Response) => {
+  try {
+    const { id, stageId, teamId } = req.params;
+    const { wins, losses, status } = req.body;
+
+    const tournament = await getTournament(id);
+    if (!tournament) {
+      return res.status(404).json({ error: 'Tournament not found' });
+    }
+    if (!isMultiStage(tournament)) {
+      return res.status(400).json({ error: 'Not a multi-stage tournament' });
+    }
+
+    const stage = tournament.stages.find((s) => s.id === stageId);
+    if (!stage) {
+      return res.status(404).json({ error: 'Stage not found' });
+    }
+
+    const teamInfo = stage.teamStageInfo.find((t) => t.teamId === teamId);
+    if (!teamInfo) {
+      return res.status(404).json({ error: 'Team not found in this stage' });
+    }
+
+    if (wins !== undefined) teamInfo.wins = wins;
+    if (losses !== undefined) teamInfo.losses = losses;
+    if (status !== undefined && ['active', 'eliminated', 'advanced'].includes(status)) {
+      teamInfo.status = status;
+    }
+
+    tournament.updatedAt = new Date().toISOString();
+    await updateTournament(tournament);
+
+    res.json(tournament);
+  } catch (error) {
+    console.error('Error editing standings:', error);
+    res.status(500).json({ error: 'Failed to edit standings' });
+  }
+});
+
+// Delete a specific match from a multi-stage tournament
+router.delete('/tournaments/:id/matches/:matchId', async (req: Request, res: Response) => {
+  try {
+    const { id, matchId } = req.params;
+
+    const tournament = await getTournament(id);
+    if (!tournament) {
+      return res.status(404).json({ error: 'Tournament not found' });
+    }
+    if (!isMultiStage(tournament)) {
+      return res.status(400).json({ error: 'Not a multi-stage tournament' });
+    }
+
+    // Find and remove the match
+    for (const stage of tournament.stages) {
+      const matchIndex = stage.matches.findIndex((m) => m.id === matchId);
+      if (matchIndex !== -1) {
+        const match = stage.matches[matchIndex];
+
+        // Revert the result if it was completed
+        if (match.status === 'completed' && match.winnerId) {
+          const winnerInfo = stage.teamStageInfo.find((t) => t.teamId === match.winnerId);
+          if (winnerInfo) {
+            winnerInfo.wins = Math.max(0, winnerInfo.wins - 1);
+            if (winnerInfo.status === 'advanced' && stage.winsToAdvance && winnerInfo.wins < stage.winsToAdvance) {
+              winnerInfo.status = 'active';
+            }
+          }
+          if (match.loserId) {
+            const loserInfo = stage.teamStageInfo.find((t) => t.teamId === match.loserId);
+            if (loserInfo) {
+              loserInfo.losses = Math.max(0, loserInfo.losses - 1);
+              if (loserInfo.status === 'eliminated' && stage.eliminationThreshold && loserInfo.losses < stage.eliminationThreshold) {
+                loserInfo.status = 'active';
+              }
+            }
+          }
+        }
+
+        // Remove the match
+        stage.matches.splice(matchIndex, 1);
+        break;
+      }
+    }
+
+    tournament.updatedAt = new Date().toISOString();
+    await updateTournament(tournament);
+
+    res.json(tournament);
+  } catch (error) {
+    console.error('Error deleting match:', error);
+    res.status(500).json({ error: 'Failed to delete match' });
+  }
+});
+
 // Start a multi-stage tournament (move from setup to in_progress)
 router.post('/tournaments/:id/multi-stage/start', async (req: Request, res: Response) => {
   try {

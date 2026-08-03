@@ -66,6 +66,17 @@ export const api = {
       { method: 'POST' }
     ),
 
+  editTeamStandings: (tournamentId: string, stageId: string, teamId: string, data: { wins?: number; losses?: number; status?: string }) =>
+    request<MultiStageTournament>(
+      `/tournaments/${tournamentId}/stages/${stageId}/teams/${teamId}/standings`,
+      { method: 'PUT', body: JSON.stringify(data) }
+    ),
+
+  deleteMatch: (tournamentId: string, matchId: string) =>
+    request<MultiStageTournament>(`/tournaments/${tournamentId}/matches/${matchId}`, {
+      method: 'DELETE',
+    }),
+
   // Team management (setup state)
   addTeams: (tournamentId: string, teams: { name: string; seed?: number }[]) =>
     request<AnyTournament>(`/tournaments/${tournamentId}/teams`, {

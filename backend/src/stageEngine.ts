@@ -390,6 +390,27 @@ export function revertAndReScore(
   targetMatch.winnerId = newWinnerId;
   targetMatch.loserId = newLoserId;
 
+  // Update bracket advancement — if the winner changed, update the next match
+  if (targetMatch.nextMatchId && oldWinnerId !== newWinnerId) {
+    const nextMatch = targetStage.matches.find((m) => m.id === targetMatch!.nextMatchId);
+    if (nextMatch) {
+      // Remove old winner from next match slot
+      if (targetMatch.nextMatchSlot === 'team1') {
+        nextMatch.team1Id = newWinnerId;
+      } else {
+        nextMatch.team2Id = newWinnerId;
+      }
+      // If next match was already completed, we need to reset it (cascading edit)
+      if (nextMatch.status === 'completed') {
+        nextMatch.status = 'pending';
+        nextMatch.team1Score = null;
+        nextMatch.team2Score = null;
+        nextMatch.winnerId = null;
+        nextMatch.loserId = null;
+      }
+    }
+  }
+
   // Update new winner
   if (newWinnerId) {
     const winnerInfo = targetStage.teamStageInfo.find((t) => t.teamId === newWinnerId);

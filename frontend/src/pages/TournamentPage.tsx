@@ -169,6 +169,7 @@ export function TournamentPage() {
           onMatchClick={setSelectedMatch}
           onGenerateNextRound={handleGroupNextRound}
           getTeamName={getTeamName}
+          onTournamentUpdate={setTournament}
         />
       )}
 
@@ -203,6 +204,7 @@ function MultiStageView({
   onMatchClick,
   onGenerateNextRound,
   getTeamName,
+  onTournamentUpdate,
 }: {
   tournament: MultiStageTournament;
   selectedStageId: string;
@@ -210,6 +212,7 @@ function MultiStageView({
   onMatchClick: (match: Match) => void;
   onGenerateNextRound: (groupId: string) => void;
   getTeamName: (id: string | null) => string;
+  onTournamentUpdate: (t: AnyTournament) => void;
 }) {
   const selectedStage = tournament.stages.find((s) => s.id === selectedStageId);
   if (!selectedStage) return null;
@@ -249,6 +252,23 @@ function MultiStageView({
           teams={tournament.teams}
           onGenerateNextRound={onGenerateNextRound}
           onMatchClick={onMatchClick}
+          onEditStandings={async (teamId, data) => {
+            try {
+              const updated = await api.editTeamStandings(tournament.id, selectedStageId, teamId, data);
+              onTournamentUpdate(updated);
+            } catch (e: any) {
+              alert('Failed to edit: ' + e.message);
+            }
+          }}
+          onEditMatch={(match) => onMatchClick(match)}
+          onDeleteMatch={async (matchId) => {
+            try {
+              const updated = await api.deleteMatch(tournament.id, matchId);
+              onTournamentUpdate(updated);
+            } catch (e: any) {
+              alert('Failed to delete: ' + e.message);
+            }
+          }}
         />
       )}
 

@@ -6,12 +6,19 @@ interface GroupStandingsProps {
   teams: Team[];
   onGenerateNextRound: (groupId: string) => void;
   onMatchClick?: (match: Match) => void;
+  onEditStandings?: (teamId: string, data: { wins?: number; losses?: number; status?: string }) => void;
+  onEditMatch?: (match: Match) => void;
+  onDeleteMatch?: (matchId: string) => void;
 }
 
 type Tab = 'matches' | 'standings';
 
-export function GroupStandings({ stage, teams, onGenerateNextRound, onMatchClick }: GroupStandingsProps) {
+export function GroupStandings({ stage, teams, onGenerateNextRound, onMatchClick, onEditStandings, onEditMatch, onDeleteMatch }: GroupStandingsProps) {
   const [activeTab, setActiveTab] = useState<Tab>('matches');
+  const [editingTeamId, setEditingTeamId] = useState<string | null>(null);
+  const [editWins, setEditWins] = useState('');
+  const [editLosses, setEditLosses] = useState('');
+  const [editStatus, setEditStatus] = useState('active');
 
   const getTeamName = (teamId: string) => {
     const team = teams.find((t) => t.id === teamId);
@@ -205,9 +212,17 @@ export function GroupStandings({ stage, teams, onGenerateNextRound, onMatchClick
                         {standings.map((info, i) => (
                           <tr
                             key={info.teamId}
+                            onClick={() => {
+                              if (onEditStandings) {
+                                setEditingTeamId(info.teamId);
+                                setEditWins(info.wins.toString());
+                                setEditLosses(info.losses.toString());
+                                setEditStatus(info.status);
+                              }
+                            }}
                             className={`border-b border-gray-700/50 ${
                               info.status === 'eliminated' ? 'opacity-50' : ''
-                            }`}
+                            } ${onEditStandings ? 'cursor-pointer hover:bg-gray-700/30 active:bg-gray-700/50' : ''}`}
                           >
                             <td className="px-2 py-2 text-gray-500 sm:px-4">{i + 1}</td>
                             <td className={`px-2 py-2 font-medium sm:px-4 max-w-[120px] sm:max-w-none truncate ${
@@ -232,6 +247,119 @@ export function GroupStandings({ stage, teams, onGenerateNextRound, onMatchClick
                 </div>
               );
             })}
+
+          {/* Edit standings modal */}
+          {editingTeamId && onEditStandings && (
+            <div className="fixed inset-0 bg-black/70 z-50 flex items-start justify-center pt-8 sm:items-center sm:pt-0 p-4">
+              <div className="bg-gray-800 border border-gray-600 rounded-xl p-4 w-full max-w-sm max-h-[80vh] overflow-y-auto">
+                <h3 className="text-sm font-bold mb-3">{getTeamName(editingTeamId)}</h3>
+
+                {/* Record edit */}
+                <div className="space-y-2 mb-4">
+                  <div className="flex items-center gap-2">
+                    <label className="text-xs text-gray-400 w-14">Wins</label>
+                    <input
+                      type="number"
+                      inputMode="numeric"
+                      value={editWins}
+                      onChange={(e) => setEditWins(e.target.value)}
+                      className="flex-1 bg-gray-700 border border-gray-600 rounded px-2 py-1.5 text-sm text-white text-center focus:border-blue-500 focus:outline-none"
+                    />
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <label className="text-xs text-gray-400 w-14">Losses</label>
+                    <input
+                      type="number"
+                      inputMode="numeric"
+                      value={editLosses}
+                      onChange={(e) => setEditLosses(e.target.value)}
+                      className="flex-1 bg-gray-700 border border-gray-600 rounded px-2 py-1.5 text-sm text-white text-center focus:border-blue-500 focus:outline-none"
+                    />
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <label className="text-xs text-gray-400 w-14">Status</label>
+                    <select
+                      value={editStatus}
+                      onChange={(e) => setEditStatus(e.target.value)}
+                      className="flex-1 bg-gray-700 border border-gray-600 rounded px-2 py-1.5 text-sm text-white focus:border-blue-500 focus:outline-none"
+                    >
+                      <option value="active">Active</option>
+                      <option value="eliminated">Eliminated</option>
+                      <option value="advanced">Advanced</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* Match history */}
+                <div className="border-t border-gray-700 pt-3 mb-4">
+                  <p className="text-xs text-gray-400 mb-2 font-medium">Match History</p>
+                  <div className="space-y-1.5">
+                    {stage.matches
+                      .filter((m) => m.status === 'completed' && (m.team1Id === editingTeamId || m.team2Id === editingTeamId))
+                      .sort((a, b) => a.round - b.round)
+                      .map((m) => {
+                        const isTeam1 = m.team1Id === editingTeamId;
+                        const opponentId = isTeam1 ? m.team2Id : m.team1Id;
+                        const won = m.winnerId === editingTeamId;
+                        const score = m.team2Id ? `${isTeam1 ? m.team1Score : m.team2Score}-${isTeam1 ? m.team2Score : m.team1Score}` : 'BYE';
+
+                        return (
+                          <div key={m.id} className="flex items-center gap-2 text-xs bg-gray-700/50 rounded px-2 py-1.5">
+                            <span className="text-gray-500">R{m.round}</span>
+                            <span className={`${won ? 'text-green-400' : 'text-red-400'} font-medium`}>
+                              {won ? 'W' : 'L'}
+                            </span>
+                            <span className="flex-1 truncate">
+                              vs {opponentId ? getTeamName(opponentId) : 'BYE'}
+                            </span>
+                            <span className="text-gray-300">{score}</span>
+                            {onEditMatch && m.team2Id && (
+                              <button
+                                onClick={() => { setEditingTeamId(null); onEditMatch(m); }}
+                                className="text-blue-400 hover:text-blue-300 px-1"
+                              >
+                                ✎
+                              </button>
+                            )}
+                            {onDeleteMatch && m.team2Id && (
+                              <button
+                                onClick={() => { if (confirm('Delete this match result?')) onDeleteMatch(m.id); }}
+                                className="text-red-400 hover:text-red-300 px-1"
+                              >
+                                ✕
+                              </button>
+                            )}
+                          </div>
+                        );
+                      })}
+                  </div>
+                </div>
+
+                {/* Buttons */}
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setEditingTeamId(null)}
+                    className="flex-1 bg-gray-700 hover:bg-gray-600 text-white px-3 py-2 rounded-lg text-sm font-medium"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={() => {
+                      onEditStandings(editingTeamId, {
+                        wins: parseInt(editWins) || 0,
+                        losses: parseInt(editLosses) || 0,
+                        status: editStatus,
+                      });
+                      setEditingTeamId(null);
+                    }}
+                    className="flex-1 bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded-lg text-sm font-medium"
+                  >
+                    Save Record
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>

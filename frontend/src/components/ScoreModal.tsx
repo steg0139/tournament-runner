@@ -17,6 +17,7 @@ export function ScoreModal({ match, team1Name, team2Name, onSubmit, onClose }: S
     match.team2Score?.toString() || ''
   );
   const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
 
   const handleSubmit = () => {
     const s1 = parseInt(team1Score, 10);
@@ -37,6 +38,7 @@ export function ScoreModal({ match, team1Name, team2Name, onSubmit, onClose }: S
       return;
     }
 
+    setSubmitting(true);
     onSubmit(s1, s2);
   };
 
@@ -80,15 +82,17 @@ export function ScoreModal({ match, team1Name, team2Name, onSubmit, onClose }: S
         <div className="flex gap-2">
           <button
             onClick={onClose}
-            className="flex-1 bg-gray-700 hover:bg-gray-600 active:bg-gray-500 text-white px-3 py-2.5 rounded-lg text-sm font-medium transition-colors"
+            disabled={submitting}
+            className="flex-1 bg-gray-700 hover:bg-gray-600 active:bg-gray-500 disabled:opacity-50 text-white px-3 py-2.5 rounded-lg text-sm font-medium transition-colors"
           >
             Cancel
           </button>
           <button
             onClick={handleSubmit}
-            className="flex-1 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white px-3 py-2.5 rounded-lg text-sm font-medium transition-colors"
+            disabled={submitting}
+            className="flex-1 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 disabled:bg-gray-600 text-white px-3 py-2.5 rounded-lg text-sm font-medium transition-colors"
           >
-            Save
+            {submitting ? 'Saving...' : 'Save'}
           </button>
         </div>
       </div>
