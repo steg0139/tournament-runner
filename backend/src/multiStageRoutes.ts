@@ -294,7 +294,9 @@ router.put('/tournaments/:id/stages/:stageId/teams/:teamId/standings', async (re
   }
 });
 
-// Delete a specific match from a multi-stage tournament
+// Delete/reset a specific match from a multi-stage tournament
+// For bracket matches (with nextMatchId), resets to pending instead of deleting
+// For Swiss matches, removes entirely
 router.delete('/tournaments/:id/matches/:matchId', async (req: Request, res: Response) => {
   try {
     const { id, matchId } = req.params;
@@ -307,7 +309,6 @@ router.delete('/tournaments/:id/matches/:matchId', async (req: Request, res: Res
       return res.status(400).json({ error: 'Not a multi-stage tournament' });
     }
 
-    // Find and remove the match
     for (const stage of tournament.stages) {
       const matchIndex = stage.matches.findIndex((m) => m.id === matchId);
       if (matchIndex !== -1) {
@@ -331,10 +332,35 @@ router.delete('/tournaments/:id/matches/:matchId', async (req: Request, res: Res
               }
             }
           }
+
+          // For bracket matches, also revert the next match advancement
+          if (match.nextMatchId) {
+            const nextMatch = stage.matches.find((m) => m.id === match.nextMatchId);
+            if (nextMatch) {
+              if (match.nextMatchSlot === 'team1') {
+                nextMatch.team1Id = null;
+              } else {
+                nextMatch.team2Id = null;
+              }
+              // Reset next match if it was completed (cascading)
+              if (nextMatch.status === 'completed') {
+                nextMatch.status = 'pending';
+                nextMatch.team1Score = null;
+                nextMatch.team2Score = null;
+                nextMatch.winnerId = null;
+                nextMatch.loserId = null;
+              }
+            }
+          }
         }
 
-        // Remove the match
-        stage.matches.splice(matchIndex, 1);
+        // Reset match to pending (keep the matchup, clear the result)
+        match.status = 'pending';
+        match.team1Score = null;
+        match.team2Score = null;
+        match.winnerId = null;
+        match.loserId = null;
+
         break;
       }
     }
