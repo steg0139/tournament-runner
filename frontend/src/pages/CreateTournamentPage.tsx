@@ -14,7 +14,7 @@ export function CreateTournamentPage() {
   const [structure, setStructure] = useState<TournamentStructure>('single');
   const [format, setFormat] = useState<TournamentFormat>('single_elimination');
   const [grandFinalsBracketReset, setGrandFinalsBracketReset] = useState(false);
-  const [randomizeSeedsOnStart, setRandomizeSeedsOnStart] = useState(false);
+  const [randomizeSeedsOnStart, setRandomizeSeedsOnStart] = useState(true);
   const [teamsExpanded, setTeamsExpanded] = useState(false);
   const [teamInput, setTeamInput] = useState('');
   const [teams, setTeams] = useState<{ name: string; seed?: number }[]>([]);
