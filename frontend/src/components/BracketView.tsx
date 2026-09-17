@@ -6,10 +6,20 @@ interface BracketViewProps {
   onMatchClick: (match: Match) => void;
 }
 
+/**
+ * A bye is a match that never gets played: it's auto-completed but is missing
+ * one or both teams (e.g. a first-round bye, or a losers-bracket slot fed by a
+ * winners-bracket bye). These aren't real games, so we hide them.
+ */
+function isBye(m: Match): boolean {
+  return m.status === 'completed' && (!m.team1Id || !m.team2Id);
+}
+
 export function BracketView({ tournament, getTeamName, onMatchClick }: BracketViewProps) {
-  const winnersMatches = tournament.matches.filter((m) => m.bracket === 'winners');
-  const losersMatches = tournament.matches.filter((m) => m.bracket === 'losers');
-  const finalsMatches = tournament.matches.filter((m) => m.bracket === 'finals');
+  const isPlayable = (m: Match) => !isBye(m);
+  const winnersMatches = tournament.matches.filter((m) => m.bracket === 'winners' && isPlayable(m));
+  const losersMatches = tournament.matches.filter((m) => m.bracket === 'losers' && isPlayable(m));
+  const finalsMatches = tournament.matches.filter((m) => m.bracket === 'finals' && isPlayable(m));
 
   const rounds = new Map<number, Match[]>();
   winnersMatches.forEach((m) => {
