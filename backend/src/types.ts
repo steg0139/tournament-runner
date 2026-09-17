@@ -91,6 +91,8 @@ export interface Tournament {
   // Double elimination only: if true, the losers-bracket champion must beat the
   // winners-bracket champion twice (a bracket-reset deciding final is played).
   grandFinalsBracketReset?: boolean;
+  // If true, team seeds are randomly shuffled when the tournament starts.
+  randomizeSeedsOnStart?: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -105,6 +107,8 @@ export interface MultiStageTournament {
   stages: Stage[];
   currentStageId: string;
   championId: string | null;
+  // If true, team seeds are randomly shuffled when the tournament starts.
+  randomizeSeedsOnStart?: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -117,12 +121,14 @@ export interface CreateTournamentRequest {
   format: TournamentFormat;
   teams?: { name: string; seed?: number }[];
   grandFinalsBracketReset?: boolean;
+  randomizeSeedsOnStart?: boolean;
 }
 
 export interface CreateMultiStageTournamentRequest {
   name: string;
   sport: Sport;
   teams?: { name: string; seed?: number }[];
+  randomizeSeedsOnStart?: boolean;
   stages: {
     name: string;
     format: TournamentFormat;

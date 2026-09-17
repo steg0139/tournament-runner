@@ -86,6 +86,7 @@ export interface Tournament {
   matches: Match[];
   currentRound: number;
   grandFinalsBracketReset?: boolean;
+  randomizeSeedsOnStart?: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -100,6 +101,7 @@ export interface MultiStageTournament {
   stages: Stage[];
   currentStageId: string;
   championId: string | null;
+  randomizeSeedsOnStart?: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -112,12 +114,14 @@ export interface CreateTournamentRequest {
   format: TournamentFormat;
   teams?: { name: string; seed?: number }[];
   grandFinalsBracketReset?: boolean;
+  randomizeSeedsOnStart?: boolean;
 }
 
 export interface CreateMultiStageTournamentRequest {
   name: string;
   sport: Sport;
   teams?: { name: string; seed?: number }[];
+  randomizeSeedsOnStart?: boolean;
   stages: {
     name: string;
     format: TournamentFormat;

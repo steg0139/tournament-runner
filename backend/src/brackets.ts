@@ -1,6 +1,19 @@
 import { v4 as uuidv4 } from 'uuid';
 import { Team, Match, TournamentFormat } from './types';
 
+/**
+ * Return a copy of the teams with their `seed` values randomly reassigned
+ * (Fisher–Yates shuffle). Seeds become 1..N in the shuffled order.
+ */
+export function randomizeSeeds(teams: Team[]): Team[] {
+  const shuffled = [...teams];
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+  }
+  return shuffled.map((t, i) => ({ ...t, seed: i + 1 }));
+}
+
 export interface GenerateMatchesOptions {
   // Double elimination: require the losers-bracket champion to beat the
   // winners-bracket champion twice by adding a bracket-reset deciding final.

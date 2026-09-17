@@ -13,6 +13,7 @@ import {
   generateSwissRound,
   resolveDoubleEliminationByes,
   findBracketResetMatch,
+  randomizeSeeds,
 } from './brackets';
 import { processScoreUpdate } from './stageEngine';
 import {
@@ -79,6 +80,7 @@ router.post('/tournaments', async (req: Request, res: Response) => {
       matches: [],
       currentRound: 1,
       grandFinalsBracketReset: body.grandFinalsBracketReset || false,
+      randomizeSeedsOnStart: body.randomizeSeedsOnStart || false,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
@@ -350,6 +352,33 @@ router.delete('/tournaments/:id/teams/:teamId', async (req: Request, res: Respon
   }
 });
 
+// Randomize team seeds in setup state
+router.post('/tournaments/:id/teams/randomize', async (req: Request, res: Response) => {
+  try {
+    const tournament = await getTournament(req.params.id);
+    if (!tournament) {
+      return res.status(404).json({ error: 'Tournament not found' });
+    }
+
+    if (isMultiStage(tournament)) {
+      return res.status(400).json({ error: 'Use multi-stage endpoints for multi-stage tournaments' });
+    }
+
+    if (tournament.status !== 'setup') {
+      return res.status(400).json({ error: 'Can only randomize seeds while tournament is in setup state' });
+    }
+
+    tournament.teams = randomizeSeeds(tournament.teams);
+    tournament.updatedAt = new Date().toISOString();
+    await updateTournament(tournament);
+
+    res.json(tournament);
+  } catch (error) {
+    console.error('Error randomizing seeds:', error);
+    res.status(500).json({ error: 'Failed to randomize seeds' });
+  }
+});
+
 // Start a tournament (move from setup to in_progress, generate matches)
 router.post('/tournaments/:id/start', async (req: Request, res: Response) => {
   try {
@@ -368,6 +397,11 @@ router.post('/tournaments/:id/start', async (req: Request, res: Response) => {
 
     if (tournament.teams.length < 2) {
       return res.status(400).json({ error: 'Need at least 2 teams to start' });
+    }
+
+    // Optionally shuffle seeds before building the bracket.
+    if (tournament.randomizeSeedsOnStart) {
+      tournament.teams = randomizeSeeds(tournament.teams);
     }
 
     // Generate matches

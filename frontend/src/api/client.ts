@@ -100,6 +100,16 @@ export const api = {
       method: 'DELETE',
     }),
 
+  randomizeSeeds: (tournamentId: string) =>
+    request<AnyTournament>(`/tournaments/${tournamentId}/teams/randomize`, {
+      method: 'POST',
+    }),
+
+  randomizeMultiStageSeeds: (tournamentId: string) =>
+    request<MultiStageTournament>(`/tournaments/${tournamentId}/multi-stage/teams/randomize`, {
+      method: 'POST',
+    }),
+
   startTournament: (tournamentId: string) =>
     request<AnyTournament>(`/tournaments/${tournamentId}/start`, {
       method: 'POST',

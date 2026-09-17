@@ -14,6 +14,8 @@ export function CreateTournamentPage() {
   const [structure, setStructure] = useState<TournamentStructure>('single');
   const [format, setFormat] = useState<TournamentFormat>('single_elimination');
   const [grandFinalsBracketReset, setGrandFinalsBracketReset] = useState(false);
+  const [randomizeSeedsOnStart, setRandomizeSeedsOnStart] = useState(false);
+  const [teamsExpanded, setTeamsExpanded] = useState(false);
   const [teamInput, setTeamInput] = useState('');
   const [teams, setTeams] = useState<{ name: string; seed?: number }[]>([]);
   const [stages, setStages] = useState<StageConfig[]>([
@@ -77,6 +79,7 @@ export function CreateTournamentPage() {
           name: name.trim(),
           sport,
           teams: teams.length > 0 ? teams : [],
+          randomizeSeedsOnStart,
           stages: sanitizedStages,
         });
         navigate(`/tournament/${tournament.id}`);
@@ -88,6 +91,7 @@ export function CreateTournamentPage() {
           teams: teams.length > 0 ? teams : [],
           grandFinalsBracketReset:
             format === 'double_elimination' ? grandFinalsBracketReset : undefined,
+          randomizeSeedsOnStart,
         });
         navigate(`/tournament/${tournament.id}`);
       }
@@ -236,74 +240,118 @@ export function CreateTournamentPage() {
           <MultiStageCreateForm stages={stages} onChange={setStages} />
         )}
 
-        {/* Teams */}
-        <div>
-          <div className="flex items-center justify-between mb-2">
-            <label className="block text-sm font-medium text-gray-300">
-              Teams / Players ({teams.length} added)
-            </label>
-            {teams.length > 1 && (
-              <button
-                type="button"
-                onClick={randomizeSeeds}
-                className="text-sm bg-gray-700 hover:bg-gray-600 text-white px-3 py-1.5 rounded transition-colors"
-                title="Shuffle the team order to randomize seeding"
-              >
-                🎲 Randomize seeds
-              </button>
-            )}
-          </div>
-          <div className="flex gap-2 items-end">
-            <textarea
-              value={teamInput}
-              onChange={(e) => setTeamInput(e.target.value)}
-              placeholder="Enter team names separated by commas or new lines"
-              rows={3}
-              className="flex-1 bg-gray-800 border border-gray-600 rounded-lg px-4 py-3 text-white placeholder-gray-500 focus:border-blue-500 focus:outline-none resize-y"
-            />
-            <button
-              onClick={handleBulkAdd}
-              className="bg-green-600 hover:bg-green-700 text-white px-4 py-3 rounded-lg font-medium transition-colors h-fit"
-            >
-              Add
-            </button>
-          </div>
-          <p className="text-xs text-gray-500 mt-1">
-            Separate names with commas or new lines. Order determines seeding (first added = #1 seed).
-            Arrange manually with the arrows, or use Randomize seeds for a random draw.
-          </p>
+        {/* Randomize seeds on start */}
+        <label className="flex items-start gap-3 p-4 rounded-lg border border-gray-600 bg-gray-800 cursor-pointer hover:border-gray-500">
+          <input
+            type="checkbox"
+            checked={randomizeSeedsOnStart}
+            onChange={(e) => setRandomizeSeedsOnStart(e.target.checked)}
+            className="mt-1"
+          />
+          <span>
+            <span className="font-medium">Randomize seeds when the tournament starts</span>
+            <span className="block text-sm text-gray-400 mt-1">
+              Seeds are shuffled into a random draw the moment you start. Any manual order
+              you set here is ignored.
+            </span>
+          </span>
+        </label>
 
-          {teams.length > 0 && (
-            <div className="mt-4 space-y-2">
-              {teams.map((team, i) => (
-                <div
-                  key={i}
-                  className="flex items-center gap-3 bg-gray-800 border border-gray-700 rounded-lg px-4 py-2"
-                >
-                  <span className="text-gray-500 text-sm w-6">#{team.seed}</span>
-                  <span className="flex-1">{team.name}</span>
+        {/* Teams (optional here) */}
+        <div className="border border-gray-700 rounded-lg">
+          <button
+            type="button"
+            onClick={() => setTeamsExpanded((v) => !v)}
+            className="w-full flex items-center justify-between px-4 py-3 text-left"
+          >
+            <span>
+              <span className="text-sm font-medium text-gray-300">
+                Teams / Players
+                <span className="text-gray-500 font-normal"> — optional</span>
+              </span>
+              <span className="block text-xs text-gray-500 mt-0.5">
+                {teams.length > 0
+                  ? `${teams.length} added`
+                  : 'You can add teams now or later on the tournament page before starting.'}
+              </span>
+            </span>
+            <span className="text-gray-400 text-sm">{teamsExpanded ? '▲' : '▼'}</span>
+          </button>
+
+          {teamsExpanded && (
+            <div className="px-4 pb-4">
+              {teams.length > 1 && (
+                <div className="flex justify-end mb-2">
                   <button
-                    onClick={() => moveTeam(i, 'up')}
-                    disabled={i === 0}
-                    className="text-gray-400 hover:text-white disabled:opacity-30"
+                    type="button"
+                    onClick={randomizeSeeds}
+                    disabled={randomizeSeedsOnStart}
+                    className="text-sm bg-gray-700 hover:bg-gray-600 disabled:opacity-40 text-white px-3 py-1.5 rounded transition-colors"
+                    title={
+                      randomizeSeedsOnStart
+                        ? 'Seeds will be randomized automatically at start'
+                        : 'Shuffle the team order to randomize seeding'
+                    }
                   >
-                    ↑
-                  </button>
-                  <button
-                    onClick={() => moveTeam(i, 'down')}
-                    disabled={i === teams.length - 1}
-                    className="text-gray-400 hover:text-white disabled:opacity-30"
-                  >
-                    ↓
-                  </button>
-                  <button
-                    onClick={() => removeTeam(i)}
-                    className="text-red-400 hover:text-red-300"
-                  >
-                    ✕
+                    🎲 Randomize seeds
                   </button>
                 </div>
-              ))}
+              )}
+              <div className="flex gap-2 items-end">
+                <textarea
+                  value={teamInput}
+                  onChange={(e) => setTeamInput(e.target.value)}
+                  placeholder="Enter team names separated by commas or new lines"
+                  rows={3}
+                  className="flex-1 bg-gray-900 border border-gray-600 rounded-lg px-4 py-3 text-white placeholder-gray-500 focus:border-blue-500 focus:outline-none resize-y"
+                />
+                <button
+                  onClick={handleBulkAdd}
+                  className="bg-green-600 hover:bg-green-700 text-white px-4 py-3 rounded-lg font-medium transition-colors h-fit"
+                >
+                  Add
+                </button>
+              </div>
+              <p className="text-xs text-gray-500 mt-1">
+                Separate names with commas or new lines. Order determines seeding (first added = #1 seed).
+                {randomizeSeedsOnStart
+                  ? ' Seed order is ignored because seeds will be randomized at start.'
+                  : ' Arrange manually with the arrows, or use Randomize seeds for a random draw.'}
+              </p>
+
+              {teams.length > 0 && (
+                <div className="mt-4 space-y-2">
+                  {teams.map((team, i) => (
+                    <div
+                      key={i}
+                      className="flex items-center gap-3 bg-gray-900 border border-gray-700 rounded-lg px-4 py-2"
+                    >
+                      <span className="text-gray-500 text-sm w-6">#{team.seed}</span>
+                      <span className="flex-1">{team.name}</span>
+                      <button
+                        onClick={() => moveTeam(i, 'up')}
+                        disabled={i === 0 || randomizeSeedsOnStart}
+                        className="text-gray-400 hover:text-white disabled:opacity-30"
+                      >
+                        ↑
+                      </button>
+                      <button
+                        onClick={() => moveTeam(i, 'down')}
+                        disabled={i === teams.length - 1 || randomizeSeedsOnStart}
+                        className="text-gray-400 hover:text-white disabled:opacity-30"
+                      >
+                        ↓
+                      </button>
+                      <button
+                        onClick={() => removeTeam(i)}
+                        className="text-red-400 hover:text-red-300"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
         </div>

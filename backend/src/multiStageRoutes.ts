@@ -10,7 +10,7 @@ import {
   assignTeamsToGroups,
   generateGroupSwissRound,
 } from './stageEngine';
-import { generateMatches } from './brackets';
+import { generateMatches, randomizeSeeds } from './brackets';
 import {
   Team,
   Stage,
@@ -180,6 +180,7 @@ router.post('/tournaments/multi-stage', async (req: Request, res: Response) => {
       stages,
       currentStageId: stages[0].id,
       championId: null,
+      randomizeSeedsOnStart: body.randomizeSeedsOnStart || false,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
@@ -252,6 +253,31 @@ router.delete('/tournaments/:id/multi-stage/teams/:teamId', async (req: Request,
   } catch (error) {
     console.error('Error removing team:', error);
     res.status(500).json({ error: 'Failed to remove team' });
+  }
+});
+
+// Randomize team seeds in setup state
+router.post('/tournaments/:id/multi-stage/teams/randomize', async (req: Request, res: Response) => {
+  try {
+    const tournament = await getTournament(req.params.id);
+    if (!tournament) {
+      return res.status(404).json({ error: 'Tournament not found' });
+    }
+    if (!isMultiStage(tournament)) {
+      return res.status(400).json({ error: 'Not a multi-stage tournament' });
+    }
+    if (tournament.status !== 'setup') {
+      return res.status(400).json({ error: 'Can only randomize seeds while tournament is in setup state' });
+    }
+
+    tournament.teams = randomizeSeeds(tournament.teams);
+    tournament.updatedAt = new Date().toISOString();
+    await updateTournament(tournament);
+
+    res.json(tournament);
+  } catch (error) {
+    console.error('Error randomizing seeds:', error);
+    res.status(500).json({ error: 'Failed to randomize seeds' });
   }
 });
 
@@ -403,6 +429,11 @@ router.post('/tournaments/:id/multi-stage/start', async (req: Request, res: Resp
           error: `Need at least ${minTeamsNeeded} teams for ${firstStage.groupCount} groups`,
         });
       }
+    }
+
+    // Optionally shuffle seeds before building the first stage.
+    if (tournament.randomizeSeedsOnStart) {
+      tournament.teams = randomizeSeeds(tournament.teams);
     }
 
     initializeFirstStage(tournament, firstStage);

@@ -357,6 +357,22 @@ function SetupView({
   const [teamInput, setTeamInput] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [starting, setStarting] = useState(false);
+  const [randomizing, setRandomizing] = useState(false);
+
+  const handleRandomizeSeeds = async () => {
+    setRandomizing(true);
+    setError(null);
+    try {
+      const updated = isMultiStage(tournament)
+        ? await api.randomizeMultiStageSeeds(tournament.id)
+        : await api.randomizeSeeds(tournament.id);
+      onTournamentUpdate(updated);
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setRandomizing(false);
+    }
+  };
 
   const handleAddTeams = async () => {
     const names = teamInput
@@ -449,22 +465,44 @@ function SetupView({
 
       {/* Team list */}
       {tournament.teams.length > 0 && (
-        <div className="mb-6 space-y-2">
-          {tournament.teams.map((team) => (
-            <div
-              key={team.id}
-              className="flex items-center gap-3 bg-gray-800 border border-gray-700 rounded-lg px-4 py-2"
-            >
-              <span className="text-gray-500 text-sm w-6">#{team.seed}</span>
-              <span className="flex-1">{team.name}</span>
+        <div className="mb-6">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-sm font-medium text-gray-300">
+              Seeded teams ({tournament.teams.length})
+            </span>
+            {tournament.teams.length > 1 && (
               <button
-                onClick={() => handleRemoveTeam(team.id)}
-                className="text-red-400 hover:text-red-300"
+                onClick={handleRandomizeSeeds}
+                disabled={randomizing}
+                className="text-sm bg-gray-700 hover:bg-gray-600 disabled:opacity-40 text-white px-3 py-1.5 rounded transition-colors"
+                title="Shuffle the team order to randomize seeding"
               >
-                ✕
+                {randomizing ? 'Randomizing...' : '🎲 Randomize seeds'}
               </button>
-            </div>
-          ))}
+            )}
+          </div>
+          {tournament.randomizeSeedsOnStart && (
+            <p className="text-xs text-gray-500 mb-2">
+              Seeds will also be randomized automatically when you start.
+            </p>
+          )}
+          <div className="space-y-2">
+            {tournament.teams.map((team) => (
+              <div
+                key={team.id}
+                className="flex items-center gap-3 bg-gray-800 border border-gray-700 rounded-lg px-4 py-2"
+              >
+                <span className="text-gray-500 text-sm w-6">#{team.seed}</span>
+                <span className="flex-1">{team.name}</span>
+                <button
+                  onClick={() => handleRemoveTeam(team.id)}
+                  className="text-red-400 hover:text-red-300"
+                >
+                  ✕
+                </button>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 
