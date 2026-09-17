@@ -36,6 +36,16 @@ export function CreateTournamentPage() {
     setTeams(newTeams.map((t, i) => ({ ...t, seed: i + 1 })));
   };
 
+  const randomizeSeeds = () => {
+    // Fisher–Yates shuffle, then reassign seeds by new order.
+    const shuffled = [...teams];
+    for (let i = shuffled.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+    }
+    setTeams(shuffled.map((t, i) => ({ ...t, seed: i + 1 })));
+  };
+
   const handleSubmit = async () => {
     if (!name.trim()) {
       setError('Tournament name is required');
@@ -228,9 +238,21 @@ export function CreateTournamentPage() {
 
         {/* Teams */}
         <div>
-          <label className="block text-sm font-medium text-gray-300 mb-2">
-            Teams / Players ({teams.length} added)
-          </label>
+          <div className="flex items-center justify-between mb-2">
+            <label className="block text-sm font-medium text-gray-300">
+              Teams / Players ({teams.length} added)
+            </label>
+            {teams.length > 1 && (
+              <button
+                type="button"
+                onClick={randomizeSeeds}
+                className="text-sm bg-gray-700 hover:bg-gray-600 text-white px-3 py-1.5 rounded transition-colors"
+                title="Shuffle the team order to randomize seeding"
+              >
+                🎲 Randomize seeds
+              </button>
+            )}
+          </div>
           <div className="flex gap-2 items-end">
             <textarea
               value={teamInput}
@@ -248,6 +270,7 @@ export function CreateTournamentPage() {
           </div>
           <p className="text-xs text-gray-500 mt-1">
             Separate names with commas or new lines. Order determines seeding (first added = #1 seed).
+            Arrange manually with the arrows, or use Randomize seeds for a random draw.
           </p>
 
           {teams.length > 0 && (
