@@ -7,7 +7,7 @@ import {
   TeamStageInfo,
   MultiStageTournament,
 } from './types';
-import { generateMatches } from './brackets';
+import { generateMatches, resolveDoubleEliminationByes } from './brackets';
 
 /**
  * Calculate Strength of Schedule for a team within a stage/group.
@@ -411,6 +411,27 @@ export function revertAndReScore(
     }
   }
 
+  // Double elimination: if the loser changed, update the losers-bracket drop.
+  if (targetMatch.loserNextMatchId && oldWinnerId !== newWinnerId) {
+    const loserNextMatch = targetStage.matches.find(
+      (m) => m.id === targetMatch!.loserNextMatchId
+    );
+    if (loserNextMatch) {
+      if (targetMatch.loserNextMatchSlot === 'team1') {
+        loserNextMatch.team1Id = newLoserId;
+      } else {
+        loserNextMatch.team2Id = newLoserId;
+      }
+      if (loserNextMatch.status === 'completed') {
+        loserNextMatch.status = 'pending';
+        loserNextMatch.team1Score = null;
+        loserNextMatch.team2Score = null;
+        loserNextMatch.winnerId = null;
+        loserNextMatch.loserId = null;
+      }
+    }
+  }
+
   // Update new winner
   if (newWinnerId) {
     const winnerInfo = targetStage.teamStageInfo.find((t) => t.teamId === newWinnerId);
@@ -532,6 +553,26 @@ export function processScoreUpdate(
         nextMatch.team2Id = targetMatch.winnerId;
       }
     }
+  }
+
+  // Double elimination: drop the loser into the losers bracket.
+  if (targetMatch.loserNextMatchId && targetMatch.loserId) {
+    const loserNextMatch = targetStage.matches.find(
+      (m) => m.id === targetMatch!.loserNextMatchId
+    );
+    if (loserNextMatch) {
+      if (targetMatch.loserNextMatchSlot === 'team1') {
+        loserNextMatch.team1Id = targetMatch.loserId;
+      } else {
+        loserNextMatch.team2Id = targetMatch.loserId;
+      }
+    }
+  }
+
+  // Double elimination: resolve losers-bracket slots fed by winners-bracket
+  // byes so dependent matches auto-advance rather than wait indefinitely.
+  if (targetStage.format === 'double_elimination') {
+    resolveDoubleEliminationByes(targetStage.matches);
   }
 
   // Update team stage info

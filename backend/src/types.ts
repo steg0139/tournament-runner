@@ -37,6 +37,9 @@ export interface Match {
   status: 'pending' | 'in_progress' | 'completed';
   nextMatchId: string | null;
   nextMatchSlot: 'team1' | 'team2' | null;
+  // For double elimination: where the loser of this match is routed.
+  loserNextMatchId?: string | null;
+  loserNextMatchSlot?: 'team1' | 'team2' | null;
 }
 
 export interface Group {

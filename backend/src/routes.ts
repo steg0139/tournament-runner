@@ -8,7 +8,11 @@ import {
   listTournaments,
   isMultiStage,
 } from './db';
-import { generateMatches, generateSwissRound } from './brackets';
+import {
+  generateMatches,
+  generateSwissRound,
+  resolveDoubleEliminationByes,
+} from './brackets';
 import { processScoreUpdate } from './stageEngine';
 import {
   Tournament,
@@ -149,6 +153,27 @@ router.put(
             nextMatch.team2Id = match.winnerId;
           }
         }
+      }
+
+      // Double elimination: drop the loser into the losers bracket.
+      if (match.loserNextMatchId && match.loserId) {
+        const loserNextMatch = tournament.matches.find(
+          (m) => m.id === match.loserNextMatchId
+        );
+        if (loserNextMatch) {
+          if (match.loserNextMatchSlot === 'team1') {
+            loserNextMatch.team1Id = match.loserId;
+          } else {
+            loserNextMatch.team2Id = match.loserId;
+          }
+        }
+      }
+
+      // Double elimination: some losers-bracket slots are fed by winners-bracket
+      // byes and will never receive a team. Resolve those so dependent matches
+      // auto-advance instead of waiting forever.
+      if (tournament.format === 'double_elimination') {
+        resolveDoubleEliminationByes(tournament.matches);
       }
 
       // Check if tournament is complete
