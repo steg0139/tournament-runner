@@ -71,6 +71,7 @@ export interface Stage {
   advancementCount?: number;
   winsToAdvance?: number;          // Teams auto-advance when reaching this win count
   courts?: number;                 // Number of available courts/boards — progressive pairing starts when pending matches < this
+  grandFinalsBracketReset?: boolean; // Double elimination: require LB champ to win twice
   groups: Group[];
   matches: Match[];
   teamStageInfo: TeamStageInfo[];
@@ -87,6 +88,9 @@ export interface Tournament {
   teams: Team[];
   matches: Match[];
   currentRound: number;
+  // Double elimination only: if true, the losers-bracket champion must beat the
+  // winners-bracket champion twice (a bracket-reset deciding final is played).
+  grandFinalsBracketReset?: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -112,6 +116,7 @@ export interface CreateTournamentRequest {
   sport: Sport;
   format: TournamentFormat;
   teams?: { name: string; seed?: number }[];
+  grandFinalsBracketReset?: boolean;
 }
 
 export interface CreateMultiStageTournamentRequest {
@@ -126,6 +131,7 @@ export interface CreateMultiStageTournamentRequest {
     advancementCount?: number;
     winsToAdvance?: number;
     courts?: number;
+    grandFinalsBracketReset?: boolean;
   }[];
 }
 

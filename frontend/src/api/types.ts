@@ -35,6 +35,8 @@ export interface Match {
   status: 'pending' | 'in_progress' | 'completed';
   nextMatchId: string | null;
   nextMatchSlot: 'team1' | 'team2' | null;
+  loserNextMatchId?: string | null;
+  loserNextMatchSlot?: 'team1' | 'team2' | null;
 }
 
 export interface Group {
@@ -66,6 +68,7 @@ export interface Stage {
   advancementCount?: number;
   winsToAdvance?: number;
   courts?: number;
+  grandFinalsBracketReset?: boolean;
   groups: Group[];
   matches: Match[];
   teamStageInfo: TeamStageInfo[];
@@ -82,6 +85,7 @@ export interface Tournament {
   teams: Team[];
   matches: Match[];
   currentRound: number;
+  grandFinalsBracketReset?: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -107,6 +111,7 @@ export interface CreateTournamentRequest {
   sport: Sport;
   format: TournamentFormat;
   teams?: { name: string; seed?: number }[];
+  grandFinalsBracketReset?: boolean;
 }
 
 export interface CreateMultiStageTournamentRequest {
@@ -121,6 +126,7 @@ export interface CreateMultiStageTournamentRequest {
     advancementCount?: number;
     winsToAdvance?: number;
     courts?: number;
+    grandFinalsBracketReset?: boolean;
   }[];
 }
 

@@ -105,14 +105,21 @@ export function BracketView({ tournament, getTeamName, onMatchClick }: BracketVi
         <div>
           <h2 className="text-xl font-semibold mb-4">Grand Finals</h2>
           <div className="flex gap-4">
-            {finalsMatches.map((match) => (
-              <MatchCard
-                key={match.id}
-                match={match}
-                getTeamName={getTeamName}
-                onClick={() => onMatchClick(match)}
-              />
-            ))}
+            {finalsMatches
+              .sort((a, b) => a.position - b.position)
+              .map((match) => (
+                <div key={match.id} className="flex-shrink-0">
+                  {/* position 1 is the bracket-reset deciding final */}
+                  <h3 className="text-sm text-gray-400 mb-3 text-center">
+                    {match.position === 1 ? 'Grand Final (Reset)' : 'Grand Final'}
+                  </h3>
+                  <MatchCard
+                    match={match}
+                    getTeamName={getTeamName}
+                    onClick={() => onMatchClick(match)}
+                  />
+                </div>
+              ))}
           </div>
         </div>
       )}

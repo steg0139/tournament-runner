@@ -12,6 +12,7 @@ import {
   generateMatches,
   generateSwissRound,
   resolveDoubleEliminationByes,
+  findBracketResetMatch,
 } from './brackets';
 import { processScoreUpdate } from './stageEngine';
 import {
@@ -77,6 +78,7 @@ router.post('/tournaments', async (req: Request, res: Response) => {
       teams,
       matches: [],
       currentRound: 1,
+      grandFinalsBracketReset: body.grandFinalsBracketReset || false,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
@@ -174,6 +176,20 @@ router.put(
       // auto-advance instead of waiting forever.
       if (tournament.format === 'double_elimination') {
         resolveDoubleEliminationByes(tournament.matches);
+        // Bracket reset: if the winners-bracket champion (grand-final team1) won
+        // the first final, no second final is needed — cancel it.
+        if (
+          match.bracket === 'finals' &&
+          match.position === 0 &&
+          match.winnerId === match.team1Id
+        ) {
+          const resetMatch = findBracketResetMatch(tournament.matches);
+          if (resetMatch) {
+            resetMatch.team1Id = null;
+            resetMatch.team2Id = null;
+            resetMatch.status = 'completed'; // resolved without being played
+          }
+        }
       }
 
       // Check if tournament is complete
@@ -355,7 +371,9 @@ router.post('/tournaments/:id/start', async (req: Request, res: Response) => {
     }
 
     // Generate matches
-    tournament.matches = generateMatches(tournament.id, tournament.teams, tournament.format);
+    tournament.matches = generateMatches(tournament.id, tournament.teams, tournament.format, {
+      grandFinalsBracketReset: tournament.grandFinalsBracketReset,
+    });
     tournament.status = 'in_progress';
     tournament.currentRound = 1;
     tournament.updatedAt = new Date().toISOString();

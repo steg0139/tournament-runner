@@ -1,13 +1,20 @@
 import { v4 as uuidv4 } from 'uuid';
 import { Team, Match, TournamentFormat } from './types';
 
+export interface GenerateMatchesOptions {
+  // Double elimination: require the losers-bracket champion to beat the
+  // winners-bracket champion twice by adding a bracket-reset deciding final.
+  grandFinalsBracketReset?: boolean;
+}
+
 /**
  * Generate matches for a tournament based on its format.
  */
 export function generateMatches(
   tournamentId: string,
   teams: Team[],
-  format: TournamentFormat
+  format: TournamentFormat,
+  options: GenerateMatchesOptions = {}
 ): Match[] {
   // Sort teams by seed (lower seed = higher rank)
   const sortedTeams = [...teams].sort((a, b) => {
@@ -21,7 +28,7 @@ export function generateMatches(
     case 'single_elimination':
       return generateSingleElimination(tournamentId, sortedTeams);
     case 'double_elimination':
-      return generateDoubleElimination(tournamentId, sortedTeams);
+      return generateDoubleElimination(tournamentId, sortedTeams, options);
     case 'round_robin':
       return generateRoundRobin(tournamentId, sortedTeams);
     case 'swiss':
@@ -146,7 +153,8 @@ function generateSingleElimination(
  */
 function generateDoubleElimination(
   tournamentId: string,
-  teams: Team[]
+  teams: Team[],
+  options: GenerateMatchesOptions = {}
 ): Match[] {
   // Winners bracket is generated the same way as single elimination.
   const winnersMatches = generateSingleElimination(tournamentId, teams);
@@ -299,6 +307,38 @@ function generateDoubleElimination(
 
   const allMatches = [...winnersMatches, ...losersMatches, grandFinals];
 
+  // Optional bracket reset: the losers-bracket champion must beat the
+  // winners-bracket champion twice. A second, deciding final is created and
+  // fed by the grand final. It is only actually played if the LB champion
+  // (grand-finals team2) wins the first final; otherwise the score handler
+  // marks it skipped. See routes/stageEngine for that logic.
+  if (options.grandFinalsBracketReset) {
+    const resetFinal: Match = {
+      id: uuidv4(),
+      tournamentId,
+      round: grandFinals.round + 1,
+      position: 1, // distinguishes the reset from the grand final (position 0)
+      team1Id: null,
+      team2Id: null,
+      team1Score: null,
+      team2Score: null,
+      winnerId: null,
+      loserId: null,
+      bracket: 'finals',
+      status: 'pending',
+      nextMatchId: null,
+      nextMatchSlot: null,
+      loserNextMatchId: null,
+      loserNextMatchSlot: null,
+    };
+    // Grand final winner and loser both carry into the reset final.
+    grandFinals.nextMatchId = resetFinal.id;
+    grandFinals.nextMatchSlot = 'team1';
+    grandFinals.loserNextMatchId = resetFinal.id;
+    grandFinals.loserNextMatchSlot = 'team2';
+    allMatches.push(resetFinal);
+  }
+
   // Resolve byes: WB byes are pre-completed with a winner but no loser, so the
   // losers-bracket slots that expected those losers would never fill. Cascade
   // those empty slots through the bracket, auto-advancing any match that ends
@@ -306,6 +346,18 @@ function generateDoubleElimination(
   resolveDoubleEliminationByes(allMatches);
 
   return allMatches;
+}
+
+/**
+ * Identify the grand-finals bracket-reset match, if present. It is the second
+ * match in the finals bracket (position 1); the grand final itself is position 0.
+ */
+export function findBracketResetMatch(matches: Match[]): Match | undefined {
+  return matches.find((m) => m.bracket === 'finals' && m.position === 1);
+}
+
+export function findGrandFinalMatch(matches: Match[]): Match | undefined {
+  return matches.find((m) => m.bracket === 'finals' && m.position === 0);
 }
 
 /**

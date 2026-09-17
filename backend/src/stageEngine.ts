@@ -7,7 +7,12 @@ import {
   TeamStageInfo,
   MultiStageTournament,
 } from './types';
-import { generateMatches, resolveDoubleEliminationByes } from './brackets';
+import {
+  generateMatches,
+  resolveDoubleEliminationByes,
+  findBracketResetMatch,
+  findGrandFinalMatch,
+} from './brackets';
 
 /**
  * Calculate Strength of Schedule for a team within a stage/group.
@@ -573,6 +578,20 @@ export function processScoreUpdate(
   // byes so dependent matches auto-advance rather than wait indefinitely.
   if (targetStage.format === 'double_elimination') {
     resolveDoubleEliminationByes(targetStage.matches);
+    // Bracket reset: if the winners-bracket champion (grand-final team1) won the
+    // first final, the second final isn't needed — cancel it.
+    if (
+      targetMatch.bracket === 'finals' &&
+      targetMatch.position === 0 &&
+      targetMatch.winnerId === targetMatch.team1Id
+    ) {
+      const resetMatch = findBracketResetMatch(targetStage.matches);
+      if (resetMatch) {
+        resetMatch.team1Id = null;
+        resetMatch.team2Id = null;
+        resetMatch.status = 'completed';
+      }
+    }
   }
 
   // Update team stage info
@@ -915,7 +934,9 @@ function triggerAdvancement(
     }
   } else {
     // Next stage has no groups - generate matches directly
-    const matches = generateMatches(tournament.id, advancingTeams, nextStage.format);
+    const matches = generateMatches(tournament.id, advancingTeams, nextStage.format, {
+      grandFinalsBracketReset: nextStage.grandFinalsBracketReset,
+    });
     // Tag matches with stageId
     matches.forEach((m) => {
       m.stageId = nextStage.id;
@@ -1016,10 +1037,18 @@ function checkTournamentComplete(
   tournament.status = 'completed';
 
   // Determine champion based on format
-  if (
-    finalStage.format === 'single_elimination' ||
-    finalStage.format === 'double_elimination'
-  ) {
+  if (finalStage.format === 'double_elimination') {
+    // The champion is the winner of the bracket-reset final if it was played,
+    // otherwise the winner of the grand final. A reset that was skipped (WB
+    // champion won the first final) is completed with no winner, so fall back.
+    const resetMatch = findBracketResetMatch(finalStage.matches);
+    const grandFinal = findGrandFinalMatch(finalStage.matches);
+    const decider =
+      resetMatch && resetMatch.winnerId ? resetMatch : grandFinal;
+    if (decider?.winnerId) {
+      tournament.championId = decider.winnerId;
+    }
+  } else if (finalStage.format === 'single_elimination') {
     // Champion is winner of the last match
     const lastRound = Math.max(...finalStage.matches.map((m) => m.round));
     const finalMatch = finalStage.matches.find(

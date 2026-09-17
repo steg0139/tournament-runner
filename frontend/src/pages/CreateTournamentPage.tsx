@@ -13,6 +13,7 @@ export function CreateTournamentPage() {
   const [sport, setSport] = useState<Sport>('basketball');
   const [structure, setStructure] = useState<TournamentStructure>('single');
   const [format, setFormat] = useState<TournamentFormat>('single_elimination');
+  const [grandFinalsBracketReset, setGrandFinalsBracketReset] = useState(false);
   const [teamInput, setTeamInput] = useState('');
   const [teams, setTeams] = useState<{ name: string; seed?: number }[]>([]);
   const [stages, setStages] = useState<StageConfig[]>([
@@ -57,6 +58,8 @@ export function CreateTournamentPage() {
             advancementCount: !isFinal && s.advancementCount && s.advancementCount > 0 ? s.advancementCount : undefined,
             winsToAdvance: s.winsToAdvance && s.winsToAdvance > 0 ? s.winsToAdvance : undefined,
             courts: s.courts && s.courts > 0 ? s.courts : undefined,
+            grandFinalsBracketReset:
+              s.format === 'double_elimination' ? !!s.grandFinalsBracketReset : undefined,
           };
         });
 
@@ -73,6 +76,8 @@ export function CreateTournamentPage() {
           sport,
           format,
           teams: teams.length > 0 ? teams : [],
+          grandFinalsBracketReset:
+            format === 'double_elimination' ? grandFinalsBracketReset : undefined,
         });
         navigate(`/tournament/${tournament.id}`);
       }
@@ -194,6 +199,25 @@ export function CreateTournamentPage() {
                 </button>
               ))}
             </div>
+
+            {/* Double-elimination bracket reset option */}
+            {format === 'double_elimination' && (
+              <label className="mt-3 flex items-start gap-3 p-4 rounded-lg border border-gray-600 bg-gray-800 cursor-pointer hover:border-gray-500">
+                <input
+                  type="checkbox"
+                  checked={grandFinalsBracketReset}
+                  onChange={(e) => setGrandFinalsBracketReset(e.target.checked)}
+                  className="mt-1"
+                />
+                <span>
+                  <span className="font-medium">True double elimination (bracket reset)</span>
+                  <span className="block text-sm text-gray-400 mt-1">
+                    The losers-bracket team must beat the winners-bracket team twice in the
+                    grand final. If they win the first final, a second deciding final is played.
+                  </span>
+                </span>
+              </label>
+            )}
           </div>
         )}
 

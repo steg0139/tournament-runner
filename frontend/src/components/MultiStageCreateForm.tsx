@@ -8,6 +8,7 @@ export interface StageConfig {
   advancementCount?: number;
   winsToAdvance?: number;
   courts?: number;
+  grandFinalsBracketReset?: boolean;
 }
 
 interface MultiStageCreateFormProps {
@@ -44,6 +45,10 @@ export function MultiStageCreateForm({ stages, onChange }: MultiStageCreateFormP
       newStages[index].eliminationThreshold = undefined;
       newStages[index].winsToAdvance = undefined;
       newStages[index].courts = undefined;
+    }
+    // Clear bracket-reset option if not double elimination
+    if (updates.format && updates.format !== 'double_elimination') {
+      newStages[index].grandFinalsBracketReset = undefined;
     }
     // Set default elimination threshold if switching to Swiss
     if (updates.format === 'swiss' && !newStages[index].eliminationThreshold) {
@@ -231,6 +236,22 @@ export function MultiStageCreateForm({ stages, onChange }: MultiStageCreateFormP
                 </div>
               )}
             </div>
+
+            {/* Bracket reset (double elimination only) */}
+            {stage.format === 'double_elimination' && (
+              <label className="flex items-start gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={!!stage.grandFinalsBracketReset}
+                  onChange={(e) => updateStage(index, { grandFinalsBracketReset: e.target.checked })}
+                  className="mt-0.5"
+                />
+                <span className="text-xs text-gray-400">
+                  <span className="text-gray-300 font-medium">True double elimination (bracket reset)</span>
+                  {' — '}the losers-bracket team must beat the winners-bracket team twice in the grand final.
+                </span>
+              </label>
+            )}
           </div>
         );
       })}

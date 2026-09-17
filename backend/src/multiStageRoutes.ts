@@ -162,6 +162,7 @@ router.post('/tournaments/multi-stage', async (req: Request, res: Response) => {
         advancementCount: stageDef.advancementCount,
         winsToAdvance: stageDef.winsToAdvance,
         courts: stageDef.courts,
+        grandFinalsBracketReset: stageDef.grandFinalsBracketReset,
         groups: [],
         matches: [],
         teamStageInfo: [],
